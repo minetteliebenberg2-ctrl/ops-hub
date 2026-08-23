@@ -31,7 +31,7 @@ dist/
 # throwaway: it carries the app icon, bundles assets/ (without which frozen
 # builds silently lose the logo and fall back from Lato to Helvetica), and
 # the hidden imports. Losing it reintroduces those bugs.
-!FC Hub.spec
+!Ops Hub.spec
 
 # OS
 Thumbs.db
