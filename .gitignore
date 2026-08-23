@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+.venv/
+venv/
+
+# VS Code
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# FC Hub backup output
+backups/
+
+# Build
+build/
+dist/
+*.egg-info/
+*.spec
+# ...except this one. It is hand-edited build config, not a PyInstaller
+# throwaway: it carries the app icon, bundles assets/ (without which frozen
+# builds silently lose the logo and fall back from Lato to Helvetica), and
+# the hidden imports. Losing it reintroduces those bugs.
+!FC Hub.spec
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Environment
+.env
+
+# Temporary files
+*.tmp
+*.bak
+.codex_test_runtime/
+# Documents module storage - Minette's real compliance PDFs, not source.
+# Leading slash anchors to the repo root so modules/documents/ (the actual
+# module code) is still tracked.
+/documents/
+/backups/db/
+
+# Client folders (Paperwork/Images/Site Visit/Returned Documents) - real
+# customer files, not source. Same reasoning as /documents/ above.
+/FC Hub - Clients/
+
+# Claude Code local config
+.claude/
+
+# Frozen exe and shortcuts
+*.exe
+*.lnk
+
+# Audit/export working files
+/exports/
+FC_Hub_AI_Mistakes_Audit.xlsx

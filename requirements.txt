@@ -1,0 +1,9 @@
+customtkinter
+send2trash
+python-docx
+pypdf
+reportlab==5.0.0
+tkcalendar
+matplotlib
+openpyxl
+Pillow
