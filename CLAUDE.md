@@ -26,18 +26,19 @@ over. Fill in the sections below as the new business is configured.
 
 ## The business workflow
 
-**Site Visit → Measurement Form → Quote (or Proposal if images) → Pro-Forma → Invoice → Warranty**
+**Quote (or Proposal if images) → Pro-Forma → Invoice → Warranty**
+
+*(Site Visit module removed from this copy — site visits are still tracked in the DB and appear
+on the Dashboard activity feed and KPI strip via the core service layer.)*
 
 | Step | Where in app | Notes |
 |------|-------------|-------|
-| 1. Site Visit | Site Visit module → hub | Schedule visit against a customer + site |
-| 2. Measurement Form | Site Visit hub → Measurement Form | Record physical dimensions on site |
-| 3a. Quote | Quotes module | Standard path — no images needed |
-| 3b. Proposal | Proposals module | When images are required — generates .docx |
-| 4. Pro-Forma | Quotes → issue → Generate Pro-Forma | Generated from an issued Quote, never hand-typed |
-| 5. Tax Invoice | From Pro-Forma | Generated from Pro-Forma |
-| 6. Statement | Quotes → Statements tab | Aggregates Tax Invoices over a date range |
-| 7. Warranty | CRM → Sites tab → edit site | Date field, updated manually |
+| 1. Quote | Quotes module | Standard path — no images needed |
+| 1b. Proposal | Proposals module | When images are required — generates .docx |
+| 2. Pro-Forma | Quotes → issue → Generate Pro-Forma | Generated from an issued Quote, never hand-typed |
+| 3. Tax Invoice | From Pro-Forma | Generated from Pro-Forma |
+| 4. Statement | Quotes → Statements tab | Aggregates Tax Invoices over a date range |
+| 5. Warranty | CRM → Sites tab → edit site | Date field, updated manually |
 
 **Job Cards** are per-job/PO work logs. Accessed from CRM → customer → Sites tab. One card per
 job/PO; add dated rows as work progresses.
@@ -71,7 +72,7 @@ the removed `structure_quote.py` (not included in this copy).
 | CRM | Working | Customers, contacts, sites, addresses, activity log |
 | Quotes | Working | Full chain, revision tracking, spreadsheet grid, VAT, PDF auto-save |
 | Accounting | Working | Ledger, bank import, reconciliation, financial statements |
-| Site Visit | Working | Hub, Measurement Form, Checklist, Site Plan, Visit History |
+| Accounting Workbook | Working | Generate annual Excel workbook (ledger, P&L, balance sheet, cash flow) |
 | Communications | Working | Email import, review queue, CRM jump |
 | Documents | Working | Templates, compliance library, expiry tracking |
 | Proposals | Working | .docx export, customer link |
@@ -83,7 +84,9 @@ the removed `structure_quote.py` (not included in this copy).
 | Backup | Working | Covers whole project root (DB + client folders + documents) |
 
 **Removed from this copy:** Shade Sails module, shade-netting structure pricing engine
-(`core/structure_quote.py`, `core/structure_catalog.py`), all shade-netting BOM logic.
+(`core/structure_quote.py`, `core/structure_catalog.py`), all shade-netting BOM logic, Site Visit
+module (`modules/site_visit/` — the core site visit data services in `core/` are retained and used
+by the dashboard activity feed and KPI strip).
 
 ---
 
@@ -205,6 +208,25 @@ class should NOT be a nav module, put it in an existing module's `windows.py`.
 ## Session log
 
 **Rule: update this section before ending every session. Next Claude reads this first.**
+
+### 2026-08-29 — port features from FC Hub
+
+**What was done:**
+- **Accounting Workbook module** — Created `modules/accounting_workbook/` (module.py, utility.py, windows.py, __init__.py). Generates annual Excel workbook via `tools/build_accounting_workbook.py`. Filename is generic (`Accounts_FY2026-27.xlsx` — no business name). Category: "Financial Year", sort_order 20.
+- **Dashboard: Add Contact quick action** — Added `+ Add Contact` button to the quick actions bar. `AddContactDialog` popup (customer picker, name, title, email, phone, mobile) saves via `CRMService.save_contact()`.
+- **Dashboard: thread-safety guards** — Added `winfo_exists()` guards to all four async callbacks (`_on_kpis_loaded`, `_on_activities_loaded`, `_on_sidebar_loaded`, `_load_customers`). Prevents "main thread is not in main loop" crash on fast close.
+- **Dashboard data: job card activity feed** — Added `JobCardService` to `DashboardData`, job cards now appear in the Recent Activity feed (matches FC Hub v2 dashboard_data).
+- **Site Visit module removed** — `modules/site_visit/` deleted. Core data services (`core/site_visit_service.py` etc.) retained — dashboard KPI strip and activity feed still query them. CLAUDE.md and AGENTS.md updated. Two orphaned site_visit regression tests removed from `tests/test_job_card_service.py`.
+- **Troubleshooter rebranded** — `modules/troubleshooter/windows.py` title and subtitle changed to "Ops Hub Diagnostics". `modules/troubleshooter/services.py` file prefix, report title, and fallback name changed to ops_hub_. `tools/export_troubleshooting_guide.py` fully rewritten: generic (no Minette reference), uses `get_project_root()` + `APP_NAME = "Ops Hub"`, pricing situation updated for no-BOM Ops Hub, health check log entry updated for 2026-08-29, output filename changed to `Ops_Hub_Troubleshooting_Guide.xlsx`.
+- **NEW_SESSION_PROMPT.md created** — startup guide for Ops Hub sessions.
+
+**DB:** Not touched. No new migrations.
+
+**Tests:** 638 passed, 1 skipped (same as baseline).
+
+**Next session should start with:** configure business identity (name, VAT status, reg number, logo, brand colour, numbering scheme), then confirm the app launches clean against a new database.
+
+---
 
 ### 2026-08-23 — repository created
 

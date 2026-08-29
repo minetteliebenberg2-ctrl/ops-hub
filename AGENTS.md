@@ -44,7 +44,7 @@ The application runs fully offline on Windows. It is frozen to a standalone .exe
 | `core/` | Business logic, services, repositories, data models, migrations, PDF generation |
 | `gui/` | Shared GUI components (main window, sidebar, entity tables, form dialogs, flow layout, styles) |
 | `framework/` | Module manager, base module class, auto-discovery |
-| `modules/` | Feature modules (accounting, backup, calendar, communications, crm, dashboard, documents, gallery, projects, proposals, quotes, settings, site_visit, and utility modules) |
+| `modules/` | Feature modules (accounting, accounting_workbook, backup, calendar, communications, crm, dashboard, documents, gallery, projects, proposals, quotes, settings, and utility modules) |
 | `assets/` | Logo placeholder, icons, fonts, default images |
 | `database/` | Live SQLite database and database backups |
 | `backups/` | Full project backups |

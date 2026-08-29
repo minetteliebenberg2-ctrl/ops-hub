@@ -8,6 +8,7 @@ import customtkinter as ctk
 from datetime import datetime
 
 from modules.dashboard.dashboard_data import DashboardData
+from core.contact import Contact
 from core.crm_service import CRMService
 from core.quote_pdf import format_money
 from gui.design_tokens import COLORS, FONTS, SPACING
@@ -180,6 +181,7 @@ class DashboardView(ctk.CTkFrame):
         actions = [
             ("+ New Quote", self._action_new_quote),
             ("+ New Customer", self._action_new_customer),
+            ("+ Add Contact", self._action_add_contact),
             ("Schedule Job", self._action_schedule_visit),
             ("Documents", self._action_documents),
             ("Job KPIs", self._action_job_kpis),
@@ -269,7 +271,8 @@ class DashboardView(ctk.CTkFrame):
                 self._all_customers = self.crm_service.list_customers() or []
             except Exception:
                 self._all_customers = []
-            self.after(0, self._update_az_strip)
+            if self.winfo_exists():
+                self.after(0, self._update_az_strip)
         threading.Thread(target=_load, daemon=True).start()
 
     def _update_az_strip(self):
@@ -384,7 +387,8 @@ class DashboardView(ctk.CTkFrame):
     # ==================================================
 
     def _on_kpis_loaded(self, data):
-        self.after(0, lambda: self._update_kpis(data))
+        if self.winfo_exists():
+            self.after(0, lambda: self._update_kpis(data))
 
     def _update_kpis(self, data):
         try:
@@ -408,7 +412,8 @@ class DashboardView(ctk.CTkFrame):
                     pass
 
     def _on_activities_loaded(self, activities):
-        self.after(0, lambda: self._update_activities(activities))
+        if self.winfo_exists():
+            self.after(0, lambda: self._update_activities(activities))
 
     def _update_activities(self, activities):
         try:
@@ -451,7 +456,8 @@ class DashboardView(ctk.CTkFrame):
                 ).pack(side="right")
 
     def _on_sidebar_loaded(self, data):
-        self.after(0, lambda: self._update_sidebar(data))
+        if self.winfo_exists():
+            self.after(0, lambda: self._update_sidebar(data))
 
     def _update_sidebar(self, data):
         try:
@@ -585,6 +591,9 @@ class DashboardView(ctk.CTkFrame):
         from modules.dashboard.kpi_window import JobKPIWindow
         JobKPIWindow(self.winfo_toplevel())
 
+    def _action_add_contact(self):
+        AddContactDialog(self.winfo_toplevel(), self.crm_service, self._all_customers)
+
     # ==================================================
     # Helpers
     # ==================================================
@@ -609,3 +618,113 @@ class DashboardView(ctk.CTkFrame):
         if delta.seconds > 60:
             return f"{delta.seconds // 60}m ago"
         return "now"
+
+
+class AddContactDialog(ctk.CTkToplevel):
+    """Simple dialog to add a contact person to any customer."""
+
+    def __init__(self, parent, crm_service, customers):
+        super().__init__(parent)
+        self.title("Add Contact Person")
+        self.geometry("420x480")
+        self.resizable(False, False)
+        self.crm_service = crm_service
+        self._customers = sorted(customers, key=lambda c: c.name or "")
+
+        self.transient(parent)
+        self.grab_set()
+        self.focus_force()
+
+        self._build_form()
+
+    def _build_form(self):
+        pad = SPACING["md"]
+
+        ctk.CTkLabel(
+            self, text="Add Contact Person", font=FONTS["heading_md"],
+            text_color=COLORS["text_primary"],
+        ).pack(anchor="w", padx=pad, pady=(pad, SPACING["sm"]))
+
+        ctk.CTkLabel(
+            self, text="Link to Customer", font=FONTS["label"],
+            text_color=COLORS["text_secondary"],
+        ).pack(anchor="w", padx=pad, pady=(SPACING["sm"], 2))
+        customer_names = [c.name for c in self._customers]
+        self._customer_var = ctk.StringVar(value=customer_names[0] if customer_names else "")
+        self._customer_menu = ctk.CTkOptionMenu(
+            self, values=customer_names or ["(no customers)"],
+            variable=self._customer_var,
+            font=FONTS["body_md"],
+            fg_color=COLORS["surface_secondary"],
+            button_color=COLORS["accent_primary"],
+            button_hover_color=COLORS["accent_hover"],
+            text_color=COLORS["text_primary"],
+            dropdown_fg_color=COLORS["surface_secondary"],
+            dropdown_text_color=COLORS["text_primary"],
+            dropdown_hover_color=COLORS["surface_tertiary"],
+        )
+        self._customer_menu.pack(fill="x", padx=pad, pady=(0, SPACING["sm"]))
+
+        fields = [
+            ("Name *", "_name_entry"),
+            ("Job Title", "_title_entry"),
+            ("Email", "_email_entry"),
+            ("Phone", "_phone_entry"),
+            ("Mobile / WhatsApp", "_mobile_entry"),
+        ]
+        for label_text, attr in fields:
+            ctk.CTkLabel(
+                self, text=label_text, font=FONTS["label"],
+                text_color=COLORS["text_secondary"],
+            ).pack(anchor="w", padx=pad, pady=(SPACING["xs"], 2))
+            entry = ctk.CTkEntry(
+                self, font=FONTS["body_md"],
+                fg_color=COLORS["surface_primary"],
+                border_color=COLORS["border_default"], border_width=1,
+                corner_radius=4, height=30,
+            )
+            entry.pack(fill="x", padx=pad)
+            setattr(self, attr, entry)
+
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=pad, pady=(SPACING["md"], pad))
+
+        ctk.CTkButton(
+            btn_frame, text="Cancel", font=FONTS["label"], height=32,
+            fg_color=COLORS["surface_secondary"],
+            text_color=COLORS["text_primary"],
+            border_width=1, border_color=COLORS["border_default"],
+            hover_color=COLORS["surface_tertiary"],
+            corner_radius=4, command=self.destroy,
+        ).pack(side="right", padx=(SPACING["sm"], 0))
+
+        ctk.CTkButton(
+            btn_frame, text="Save Contact", font=FONTS["label"], height=32,
+            fg_color=COLORS["accent_primary"],
+            text_color=COLORS["text_inverse"],
+            hover_color=COLORS["accent_hover"],
+            corner_radius=4, command=self._save,
+        ).pack(side="right")
+
+    def _save(self):
+        name = self._name_entry.get().strip()
+        if not name:
+            self._name_entry.configure(border_color=COLORS.get("danger", "#E53935"))
+            return
+
+        customer_name = self._customer_var.get()
+        customer = next((c for c in self._customers if c.name == customer_name), None)
+        if not customer:
+            return
+
+        contact = Contact(
+            customer_id=customer.id,
+            name=name,
+            job_title=self._title_entry.get().strip(),
+            email=self._email_entry.get().strip(),
+            phone=self._phone_entry.get().strip(),
+            mobile=self._mobile_entry.get().strip(),
+            whatsapp=self._mobile_entry.get().strip(),
+        )
+        self.crm_service.save_contact(contact)
+        self.destroy()

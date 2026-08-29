@@ -12,6 +12,7 @@ import threading
 from datetime import date, datetime
 
 from core.crm_service import CRMService
+from core.job_card_service import JobCardService
 from core.payment_service import PaymentService
 from core.quote import format_quote_number
 from core.quote_service import QuoteService
@@ -32,11 +33,12 @@ WARRANTY_WARNING_DAYS = 30
 class DashboardData:
     """Aggregate data from core services for dashboard display."""
 
-    def __init__(self, crm_service=None, quote_service=None, payment_service=None, site_visit_service=None):
+    def __init__(self, crm_service=None, quote_service=None, payment_service=None, site_visit_service=None, job_card_service=None):
         self.crm_service = crm_service or CRMService()
         self.quote_service = quote_service or QuoteService()
         self.payment_service = payment_service or PaymentService()
         self.site_visit_service = site_visit_service or SiteVisitService()
+        self.job_card_service = job_card_service or JobCardService()
 
     # ==================================================
     # KPI Methods
@@ -159,6 +161,24 @@ class DashboardData:
                     )
         except Exception as e:
             print(f"Error getting contacts: {e}")
+
+        # Get recent job cards
+        try:
+            customers_by_id = {c.id: c for c in self.crm_service.list_customers()}
+            job_cards = self.job_card_service.job_cards.list_recent(3)
+            for jc in job_cards:
+                customer = customers_by_id.get(jc.customer_id)
+                customer_name = customer.name if customer else "Unknown"
+                activities.append(
+                    {
+                        "icon": "📋",
+                        "description": f"Job card {jc.status}",
+                        "entity": f"{customer_name} — {jc.job_card_number or jc.id[:8]}",
+                        "timestamp": jc.created_at,
+                    }
+                )
+        except Exception as e:
+            print(f"Error getting job cards for activity: {e}")
 
         # Sort all by timestamp (newest first)
         activities.sort(key=lambda a: a["timestamp"] or datetime.min, reverse=True)

@@ -1,4 +1,4 @@
-"""Native FC Hub Troubleshooter user interface."""
+"""Native Ops Hub Diagnostics user interface."""
 
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -23,8 +23,8 @@ class TroubleshooterWindow(ctk.CTkFrame):
         self._update_summary()
 
     def _build_ui(self):
-        ctk.CTkLabel(self, text="FC Hub Troubleshooter", font=("Segoe UI", 24, "bold")).pack(anchor="w", padx=15, pady=(15, 2))
-        ctk.CTkLabel(self, text="Checks FC Hub health safely without changing user data.").pack(anchor="w", padx=15, pady=(0, 12))
+        ctk.CTkLabel(self, text="Ops Hub Diagnostics", font=("Segoe UI", 24, "bold")).pack(anchor="w", padx=15, pady=(15, 2))
+        ctk.CTkLabel(self, text="Checks Ops Hub health safely without changing user data.").pack(anchor="w", padx=15, pady=(0, 12))
 
         toolbar = ctk.CTkFrame(self)
         toolbar.pack(fill="x", padx=15, pady=(0, 10))

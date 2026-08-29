@@ -95,7 +95,7 @@ class TroubleshooterService:
         output_dir = PROJECT_ROOT / "exports"
         output_dir.mkdir(parents=True, exist_ok=True)
         if destination is None:
-            base = "fc_hub_troubleshooter_" + now.strftime("%Y%m%d_%H%M%S")
+            base = "ops_hub_diagnostic_" + now.strftime("%Y%m%d_%H%M%S")
             destination = output_dir / f"{base}.txt"
             suffix = 1
             while destination.exists():
@@ -108,7 +108,7 @@ class TroubleshooterService:
             raise FileExistsError(f"Report already exists: {destination}")
         summary = summarize(results)
         lines = [
-            "FC Hub Troubleshooter", "=" * 22,
+            "Ops Hub Diagnostic Report", "=" * 25,
             f"Generated: {now.isoformat(timespec='seconds')}",
             f"Python: {sys.version.split()[0]}",
             f"Python executable: {sys.executable}",
@@ -131,4 +131,4 @@ class TroubleshooterService:
 
 def safe_filename(value):
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._")
-    return cleaned or "fc_hub_report"
+    return cleaned or "ops_hub_diagnostic"
