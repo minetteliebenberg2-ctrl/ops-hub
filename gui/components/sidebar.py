@@ -33,6 +33,7 @@ ICON_MAP = {
     "calendar": "📅",
     "shade_sails": "⛵",
     "batch_renamer": "🏷️",
+    "annual_compliance": "🗂️",
     "backup": "💾",
     "duplicate_finder": "🔍",
     "file_mover": "📁",
