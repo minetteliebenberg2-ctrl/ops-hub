@@ -215,11 +215,12 @@ class should NOT be a nav module, put it in an existing module's `windows.py`.
 - **Dashboard: maximise button** — ⛶ button added next to "Dashboard" heading. Calls `winfo_toplevel().state("zoomed")`. Workaround for startup maximise not firing on Minette's PC.
 - **Gallery sync** — `modules/gallery/windows.py` updated to match FC Hub: All Clients view (customer dropdown starts "All Clients", aggregates all photos, shows client badge), `GalleryPickerDialog`, image compression. Was on 2026-08-19 version.
 - **Job Costing module committed** — was previously unstaged; `modules/job_costing/` and migrations v50–v55 now committed.
-- **Exe rebuilt** — `Ops Hub.spec`, copied to `C:\FC Add on\Ops Hub.exe`.
+- **Annual Compliance module added** — Payroll, Annual Returns, COIDA Tracker. All FacilitiesCo-specific hardcoding removed (no default employee name, no hardcoded COIDA ref/member/status). Icons registered in both `sidebar.py` and `module_nav.py` ICON_MAPs. Migration v0051 already present in `Ops Hub.spec` hiddenimports.
+- **Exe rebuilt** — `Ops Hub.spec`, copied to `C:\FC Add on\Ops Hub.exe` (81 MB, 12:37).
 
-**Commits:** `8d039bc`, `2f82062`
+**Commits:** `8d039bc`, `2f82062`, `68206f7`
 
-**Next session:** Confirm exe works — test the ⛶ button and Gallery → All Clients view.
+**Next session:** Confirm exe works — test the ⛶ button, Gallery → All Clients view, and Annual Compliance module.
 
 ---
 
