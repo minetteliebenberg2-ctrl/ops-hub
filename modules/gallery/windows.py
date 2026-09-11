@@ -227,10 +227,10 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
     def refresh(self):
 
         self._customers = [c for c in self.crm_service.list_customers() if c.name]
-        names = [c.name for c in self._customers] or ["(no customers)"]
+        names = ["All Clients"] + [c.name for c in self._customers]
         self.customer_menu.configure(values=names)
         if self.customer_var.get() not in names:
-            self.customer_var.set(names[0])
+            self.customer_var.set("All Clients")
         self._refresh_filters()
         self._load_images()
 
@@ -241,12 +241,15 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
     def _refresh_filters(self):
         customer = self._current_customer()
         if customer is None:
-            self.album_menu.configure(values=["All"])
-            self.tag_menu.configure(values=["All"])
+            # "All Clients" — disable album/tag filters
+            self.album_menu.configure(values=["All"], state="disabled")
+            self.tag_menu.configure(values=["All"], state="disabled")
             self.album_var.set("All")
             self.tag_var.set("All")
             return
 
+        self.album_menu.configure(state="normal")
+        self.tag_menu.configure(state="normal")
         albums = ["All"] + self.image_service.list_albums(customer.id)
         tags = ["All"] + self.image_service.list_tags(customer.id)
         self.album_menu.configure(values=albums)
@@ -257,8 +260,10 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
             self.tag_var.set("All")
 
     def _current_customer(self):
-
+        """Returns the selected Customer object, or None when 'All Clients' is selected."""
         name = self.customer_var.get()
+        if name == "All Clients":
+            return None
         for customer in self._customers:
             if customer.name == name:
                 return customer
@@ -272,25 +277,33 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
 
         customer = self._current_customer()
         self._selected_customer = customer
+
         if customer is None:
-            self.count_label.configure(text="No customer selected.")
-            return
-
-        images = [
-            image for image in self.image_service.list_for_customer(customer.id)
-            if not getattr(image, "archived_at", "")
-        ]
-
-        album_filter = self.album_var.get()
-        if album_filter and album_filter != "All":
-            images = [img for img in images if img.album == album_filter]
-
-        tag_filter = self.tag_var.get()
-        if tag_filter and tag_filter != "All":
-            images = [img for img in images if tag_filter in img.tag_list]
-
-        self._images = images
-        self.count_label.configure(text=f"{len(self._images)} photo(s) for {customer.name}")
+            # All Clients — aggregate across every customer
+            all_images = []
+            customer_map = {}
+            for c in self._customers:
+                for img in self.image_service.list_for_customer(c.id):
+                    if not getattr(img, "archived_at", ""):
+                        all_images.append(img)
+                        customer_map[img.id] = c
+            self._images = all_images
+            self._customer_map = customer_map
+            self.count_label.configure(text=f"{len(self._images)} photo(s) across all clients")
+        else:
+            self._customer_map = {}
+            images = [
+                image for image in self.image_service.list_for_customer(customer.id)
+                if not getattr(image, "archived_at", "")
+            ]
+            album_filter = self.album_var.get()
+            if album_filter and album_filter != "All":
+                images = [img for img in images if img.album == album_filter]
+            tag_filter = self.tag_var.get()
+            if tag_filter and tag_filter != "All":
+                images = [img for img in images if tag_filter in img.tag_list]
+            self._images = images
+            self.count_label.configure(text=f"{len(self._images)} photo(s) for {customer.name}")
 
         if not self._images:
             ctk.CTkLabel(
@@ -304,7 +317,8 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
         for index, image in enumerate(self._images):
             cell = ctk.CTkFrame(self.grid_frame, fg_color=THEME_SURFACE_LIGHT)
             cell.grid(row=index // columns, column=index % columns, padx=6, pady=6, sticky="nsew")
-            self._build_thumbnail(cell, image, customer)
+            img_customer = self._customer_map.get(image.id, customer)
+            self._build_thumbnail(cell, image, img_customer)
 
         for column in range(columns):
             self.grid_frame.grid_columnconfigure(column, weight=1)
@@ -342,7 +356,12 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
         ctk.CTkLabel(
             cell, text=caption_text,
             text_color=THEME_TEXT_SECONDARY, font=("Segoe UI", 9), wraplength=190, justify="left",
-        ).pack(padx=6, pady=(0, 4))
+        ).pack(padx=6, pady=(0, 2))
+        if self.customer_var.get() == "All Clients" and customer:
+            ctk.CTkLabel(
+                cell, text=f"👤 {customer.name}",
+                text_color=THEME_TEXT_PRIMARY, font=("Segoe UI", 9, "bold"), wraplength=190, justify="left",
+            ).pack(padx=6, pady=(0, 4))
 
         btn_row = ctk.CTkFrame(cell, fg_color="transparent")
         btn_row.pack(padx=6, pady=(0, 6), fill="x")
