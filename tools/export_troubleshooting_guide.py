@@ -94,6 +94,8 @@ SITUATIONS = [
      "The ledger has an Undo for the last edit. Use that rather than re-typing - it keeps the audit trail honest."),
     ("A bank statement imported without categories",
      "Categories come from saved rules. Change one transaction's category and say yes when asked to remember the rule - the next import will apply it automatically. See the Auto-Categorising sheet."),
+    ("The app opens small / not full screen",
+     "Click the ⛶ button next to the Dashboard heading to maximise the window. This is a known issue with the startup state on some PCs — the button is the fix."),
     ("Before ANY big change",
      f"Make a backup: the Backup module, or copy the whole {APP_NAME} folder. Backups are free; recovery is not."),
 ]
@@ -171,7 +173,9 @@ def main():
     _table(
         log,
         ["Date", "Run by", "Result", "Notes / what was fixed"],
-        [("2026-08-29", "Claude", "All 11 checks PASS",
+        [("2026-09-11", "Claude", "All 11 checks PASS",
+          "Current baseline. Modules: Dashboard (+ maximise button), CRM, Quotes, Accounting, Accounting Workbook, Communications, Documents, Gallery (All Clients view), Calendar/Jobs, Projects, Job Costing, Annual Compliance, Backup, Settings, Troubleshooter, Batch Renamer, Duplicate Finder, Empty Folder Remover, File Mover. Site Visit excluded (not applicable). Business identity not yet configured — see CLAUDE.md."),
+         ("2026-08-29", "Claude", "All 11 checks PASS",
           "Updated baseline for Ops Hub. DB created fresh, all checks PASS. Modules: CRM, Quotes, Accounting, Accounting Workbook, Calendar, Communications, Documents, Gallery, Projects, Proposals, Backup, Settings, Dashboard. Site Visit removed (not applicable).")],
         [14, 16, 24, 84], 34,
     )
