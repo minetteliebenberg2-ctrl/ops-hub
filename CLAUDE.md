@@ -209,6 +209,20 @@ class should NOT be a nav module, put it in an existing module's `windows.py`.
 
 **Rule: update this section before ending every session. Next Claude reads this first.**
 
+### 2026-09-11 — sync from FC Hub
+
+**What was done:**
+- **Dashboard: maximise button** — ⛶ button added next to "Dashboard" heading. Calls `winfo_toplevel().state("zoomed")`. Workaround for startup maximise not firing on Minette's PC.
+- **Gallery sync** — `modules/gallery/windows.py` updated to match FC Hub: All Clients view (customer dropdown starts "All Clients", aggregates all photos, shows client badge), `GalleryPickerDialog`, image compression. Was on 2026-08-19 version.
+- **Job Costing module committed** — was previously unstaged; `modules/job_costing/` and migrations v50–v55 now committed.
+- **Exe rebuilt** — `Ops Hub.spec`, copied to `C:\FC Add on\Ops Hub.exe`.
+
+**Commits:** `8d039bc`, `2f82062`
+
+**Next session:** Confirm exe works — test the ⛶ button and Gallery → All Clients view.
+
+---
+
 ### 2026-08-29 — port features from FC Hub
 
 **What was done:**
