@@ -39,8 +39,14 @@ class JobCardRepository:
         commit or roll back together."""
 
         with self.db.connect() as connection:
+            cust_row = connection.execute(
+                "SELECT customer_number FROM customers WHERE id = ?",
+                (customer_id,),
+            ).fetchone()
+            cust_prefix = cust_row["customer_number"].split("-")[0] if cust_row and cust_row["customer_number"] else ""
+            prefix = f"{cust_prefix}-{JOB_CARD_PREFIX}" if cust_prefix else JOB_CARD_PREFIX
             job_card_number = self.numbering.allocate_yearly(
-                connection, JOB_CARD_DOCUMENT_TYPE, scope_id=customer_id, prefix=JOB_CARD_PREFIX, padding=3,
+                connection, JOB_CARD_DOCUMENT_TYPE, scope_id=customer_id, prefix=prefix, padding=3,
             )
 
             now = self._timestamp()
@@ -132,6 +138,18 @@ class JobCardRepository:
             rows = connection.execute(
                 "SELECT * FROM job_cards WHERE customer_id = ? ORDER BY created_at DESC",
                 (customer_id,),
+            ).fetchall()
+
+        return [self._to_job_card(row) for row in rows]
+
+    # --------------------------------------------------
+
+    def list_all(self):
+        """All job cards across all customers, most recent first."""
+
+        with self.db.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM job_cards ORDER BY created_at DESC"
             ).fetchall()
 
         return [self._to_job_card(row) for row in rows]

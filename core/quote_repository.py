@@ -37,11 +37,13 @@ class QuoteRepository:
                     issue_date, expiry_date, currency, payment_terms_snapshot,
                     deposit_percentage, balance_percentage, subtotal_minor,
                     vat_minor, total_minor, po_number, vat_number,
-                    registration_number, bill_to_name, notes,
+                    registration_number, bill_to_name,
+                    print_billing_address, print_delivery_address, print_postal_address,
+                    notes,
                     revision_of_quote_id, revision_number,
                     created_at, updated_at, created_by, updated_by
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     site_id = excluded.site_id,
                     expiry_date = excluded.expiry_date,
@@ -55,6 +57,9 @@ class QuoteRepository:
                     vat_number = excluded.vat_number,
                     registration_number = excluded.registration_number,
                     bill_to_name = excluded.bill_to_name,
+                    print_billing_address = excluded.print_billing_address,
+                    print_delivery_address = excluded.print_delivery_address,
+                    print_postal_address = excluded.print_postal_address,
                     notes = excluded.notes,
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by
@@ -78,6 +83,9 @@ class QuoteRepository:
                     quote.vat_number,
                     quote.registration_number,
                     quote.bill_to_name,
+                    int(quote.print_billing_address),
+                    int(quote.print_delivery_address),
+                    int(quote.print_postal_address),
                     quote.notes,
                     quote.revision_of_quote_id or None,
                     quote.revision_number,
@@ -157,11 +165,12 @@ class QuoteRepository:
                 if customer is None or not customer["customer_number"]:
                     raise NumberingError("The customer does not have a customer number yet.")
 
+                cust_prefix = customer["customer_number"].split("-")[0]
                 quote_number = self.numbering.allocate_yearly(
                     connection,
                     "quote",
                     scope_id=row["customer_id"],
-                    prefix="Q",
+                    prefix=f"{cust_prefix}-Q",
                     padding=3,
                 )
 
@@ -293,9 +302,17 @@ class QuoteRepository:
         and any quote_documents (see core/quote_service.py: called by
         delete_draft_quote for never-issued Drafts, and by
         delete_quote for any status - the payment-allocation guard
-        lives in the service layer, not here)."""
+        lives in the service layer, not here).
+
+        Also deletes any revisions that reference this quote (and
+        nulls out revision_of_quote_id on any quote pointing here)
+        so the FK constraint doesn't block the delete."""
 
         with self.db.connect() as connection:
+            connection.execute(
+                "UPDATE quotes SET revision_of_quote_id = NULL WHERE revision_of_quote_id = ?",
+                (quote_id,),
+            )
             connection.execute("DELETE FROM quotes WHERE id = ?", (quote_id,))
 
     # --------------------------------------------------
@@ -327,6 +344,9 @@ class QuoteRepository:
             vat_number=row["vat_number"] or "",
             registration_number=row["registration_number"] or "",
             bill_to_name=row["bill_to_name"] or "",
+            print_billing_address=bool(row["print_billing_address"]) if "print_billing_address" in row.keys() else True,
+            print_delivery_address=bool(row["print_delivery_address"]) if "print_delivery_address" in row.keys() else False,
+            print_postal_address=bool(row["print_postal_address"]) if "print_postal_address" in row.keys() else False,
             notes=row["notes"],
             revision_of_quote_id=row["revision_of_quote_id"] or "",
             revision_number=row["revision_number"],

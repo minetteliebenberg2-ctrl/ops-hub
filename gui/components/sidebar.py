@@ -38,6 +38,7 @@ ICON_MAP = {
     "file_mover": "📁",
     "empty_folder_remover": "🗑️",
     "troubleshooter": "🛠️",
+    "job_costing": "📈",
 }
 
 

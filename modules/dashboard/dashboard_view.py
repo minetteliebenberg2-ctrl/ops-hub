@@ -65,10 +65,23 @@ class DashboardView(ctk.CTkFrame):
         header = ctk.CTkFrame(parent, fg_color="transparent")
         header.pack(fill="x", padx=SPACING["xxl"], pady=(SPACING["xxl"], SPACING["sm"]))
 
+        title_row = ctk.CTkFrame(header, fg_color="transparent")
+        title_row.pack(fill="x")
+
         ctk.CTkLabel(
-            header, text="Dashboard", font=FONTS["title_lg"],
+            title_row, text="Dashboard", font=FONTS["title_lg"],
             text_color=COLORS["text_primary"],
-        ).pack(anchor="w")
+        ).pack(side="left", anchor="w")
+
+        ctk.CTkButton(
+            title_row, text="⛶", width=30, height=30,
+            font=("Lato", 16),
+            fg_color="transparent",
+            text_color=COLORS["text_tertiary"],
+            hover_color=COLORS["surface_secondary"],
+            border_width=0,
+            command=lambda: self.winfo_toplevel().state("zoomed"),
+        ).pack(side="left", padx=(8, 0), anchor="w")
 
         now = datetime.now()
         ctk.CTkLabel(

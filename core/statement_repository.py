@@ -30,11 +30,17 @@ class StatementRepository:
     def create(self, customer_id, period_start, period_end, notes, currency, total_minor, invoice_document_ids, actor):
 
         with self.db.connect() as connection:
+            cust_row = connection.execute(
+                "SELECT customer_number FROM customers WHERE id = ?",
+                (customer_id,),
+            ).fetchone()
+            cust_prefix = cust_row["customer_number"].split("-")[0] if cust_row and cust_row["customer_number"] else ""
+            prefix = f"{cust_prefix}-STA" if cust_prefix else "STA"
             document_number = self.numbering.allocate_yearly(
                 connection,
                 "statement",
                 scope_id=customer_id,
-                prefix="STA",
+                prefix=prefix,
                 padding=3,
             )
 

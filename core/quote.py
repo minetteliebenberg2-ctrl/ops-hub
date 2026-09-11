@@ -33,6 +33,9 @@ class Quote:
     vat_number: str = ""
     registration_number: str = ""
     bill_to_name: str = ""
+    print_billing_address: bool = True
+    print_delivery_address: bool = False
+    print_postal_address: bool = False
     notes: str = ""
     revision_of_quote_id: str = ""
     revision_number: int = 0
