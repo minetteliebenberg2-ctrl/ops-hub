@@ -209,18 +209,19 @@ class should NOT be a nav module, put it in an existing module's `windows.py`.
 
 **Rule: update this section before ending every session. Next Claude reads this first.**
 
-### 2026-09-11 — sync from FC Hub
+### 2026-09-11 — sync from FC Hub + daily backup
 
 **What was done:**
-- **Dashboard: maximise button** — ⛶ button added next to "Dashboard" heading. Calls `winfo_toplevel().state("zoomed")`. Workaround for startup maximise not firing on Minette's PC.
-- **Gallery sync** — `modules/gallery/windows.py` updated to match FC Hub: All Clients view (customer dropdown starts "All Clients", aggregates all photos, shows client badge), `GalleryPickerDialog`, image compression. Was on 2026-08-19 version.
-- **Job Costing module committed** — was previously unstaged; `modules/job_costing/` and migrations v50–v55 now committed.
-- **Annual Compliance module added** — Payroll, Annual Returns, COIDA Tracker. All FacilitiesCo-specific hardcoding removed (no default employee name, no hardcoded COIDA ref/member/status). Icons registered in both `sidebar.py` and `module_nav.py` ICON_MAPs. Migration v0051 already present in `Ops Hub.spec` hiddenimports.
-- **Exe rebuilt** — `Ops Hub.spec`, copied to `C:\FC Add on\Ops Hub.exe` (81 MB, 12:37).
+- **Dashboard: maximise button** — ⛶ button added next to "Dashboard" heading. Calls `winfo_toplevel().state("zoomed")`. Workaround for startup maximise not firing.
+- **Gallery sync** — `modules/gallery/windows.py` updated: All Clients view, `GalleryPickerDialog`, image compression.
+- **Annual Compliance module added** — Payroll, Annual Returns, COIDA Tracker. All FacilitiesCo-specific hardcoding removed. Icons registered in both `sidebar.py` and `module_nav.py` ICON_MAPs.
+- **Daily scheduled backup with 7-day retention** — `tools/scheduled_backup.py` created. Runs at 18:00 SAST daily, keeps last 7 days, deletes older backups automatically via `BackupService(retention_days=7)` + `shutil.rmtree()`. Windows Task Scheduler task "Ops Hub Daily Backup" registered.
+- **DB path fix** — `modules/backup/services.py` `DATABASE_RELATIVE_PATH` corrected to `app.db` (was `fc_hub.db`).
+- **Exe rebuilt** — `Ops Hub.spec`, copied to `C:\FC Add on\Ops Hub.exe`.
 
-**Commits:** `8d039bc`, `2f82062`, `68206f7`
+**Commits:** `8d039bc`, `2f82062`, `68206f7`, `560efb5`
 
-**Next session:** Confirm exe works — test the ⛶ button, Gallery → All Clients view, and Annual Compliance module.
+**Next session:** No open bugs or pending migrations. Test ⛶ button, Gallery → All Clients view, Annual Compliance, and confirm backup log at `logs\scheduled_backup.log`.
 
 ---
 
