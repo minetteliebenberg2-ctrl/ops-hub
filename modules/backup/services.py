@@ -29,7 +29,7 @@ from core.app_paths import get_project_root
 LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = get_project_root()
 BACKUP_FORMAT_VERSION = "1.0"
-DATABASE_RELATIVE_PATH = Path("database") / "fc_hub.db"
+DATABASE_RELATIVE_PATH = Path("database") / "app.db"
 MANIFEST_NAME = "manifest.json"
 
 EXCLUDED_DIRECTORY_NAMES = frozenset(
