@@ -84,6 +84,7 @@ a = Analysis(
         'core.migrations.versions.v0053_picklist_category',
         'core.migrations.versions.v0054_quote_print_address_flags',
         'core.migrations.versions.v0055_job_cost_allocations',
+        'core.migrations.versions.v0056_document_category_picklist',
         # modules (collected via collect_submodules in hookspath is preferred, but list explicitly as fallback)
         'modules.job_costing', 'modules.job_costing.module', 'modules.job_costing.utility', 'modules.job_costing.windows',
     ],

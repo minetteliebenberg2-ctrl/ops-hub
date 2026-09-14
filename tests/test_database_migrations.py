@@ -115,6 +115,13 @@ class DatabaseMigrationTests(unittest.TestCase):
                     (47, "job_cost_items"),
                     (48, "fix_account_labels_and_categories"),
                     (49, "bank_accounts_table"),
+                    (50, "bank_accounts_noop"),
+                    (51, "annual_compliance"),
+                    (52, "site_plan_net_measurements"),
+                    (53, "picklist_category"),
+                    (54, "quote_print_address_flags"),
+                    (55, "job_cost_allocations"),
+                    (56, "document_category_picklist"),
                 ],
             )
             self.assertEqual(user_version, MigrationRunner(database).latest_version)
@@ -429,6 +436,13 @@ class DatabaseMigrationTests(unittest.TestCase):
                     "job_cost_items",
                     "fix_account_labels_and_categories",
                     "bank_accounts_table",
+                    "bank_accounts_noop",
+                    "annual_compliance",
+                    "site_plan_net_measurements",
+                    "picklist_category",
+                    "quote_print_address_flags",
+                    "job_cost_allocations",
+                    "document_category_picklist",
                 ],
             )
 

@@ -20,6 +20,7 @@ from core.picklist_repository import PicklistOptionRepository
 PAYMENT_TERMS = "payment_terms"
 CUSTOMER_TYPE = "customer_type"
 LINE_ITEM_TYPE = "line_item_type"
+DOCUMENT_CATEGORY = "document_category"
 
 PERCENTAGE_LISTS = {PAYMENT_TERMS}
 

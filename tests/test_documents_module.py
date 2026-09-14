@@ -12,7 +12,6 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from modules.documents.services import (
-    CATEGORIES,
     EXPIRY_WARNING_DAYS,
     Document,
     DocumentsRepository,
@@ -134,20 +133,17 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(self.repository.file_path(first).is_file())
         self.assertTrue(self.repository.file_path(second).is_file())
 
-    def test_unknown_category_is_rejected(self):
-        with self.assertRaises(ValueError):
-            self.repository.add_document(
-                source_path=self.source, title="X", category="Nonsense"
-            )
+    def test_arbitrary_category_is_accepted(self):
+        document = self.repository.add_document(
+            source_path=self.source, title="X", category="Anything Minette Named"
+        )
+        self.assertEqual(document.category, "Anything Minette Named")
 
     def test_missing_source_file_is_rejected(self):
         with self.assertRaises(FileNotFoundError):
             self.repository.add_document(
                 source_path=self.temp_path / "nope.pdf", title="X"
             )
-
-    def test_categories_cover_what_the_module_offers(self):
-        self.assertEqual(set(CATEGORIES), {"Compliance", "Letters", "Banking", "Insurance"})
 
     def test_listing_can_filter_by_category(self):
         self.repository.add_document(source_path=self.source, title="A", category="Compliance")

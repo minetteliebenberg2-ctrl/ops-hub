@@ -23,7 +23,11 @@ from core.app_paths import get_project_root
 from core.database import DATABASE_PATH
 
 
-CATEGORIES = ("Compliance", "Letters", "Banking", "Insurance")
+# Document categories are user-managed (Settings -> Document Types,
+# picklist_options list_name "document_category") rather than fixed here -
+# see core/picklist_service.DOCUMENT_CATEGORY. This module doesn't validate
+# category against that list: a category deleted from Settings should not
+# retroactively invalidate documents already filed under it.
 
 # Documents whose lapse actually bites: a client asks mid-tender and the
 # certificate turns out to have expired. Anything inside this window is
@@ -169,9 +173,6 @@ class DocumentsRepository:
         if not source_path.is_file():
             raise FileNotFoundError(f"No such file: {source_path}")
 
-        if category not in CATEGORIES:
-            raise ValueError(f"Unknown category {category!r}. Expected one of {CATEGORIES}.")
-
         title = (title or source_path.stem).strip()
         if not title:
             raise ValueError("A document needs a title.")
@@ -207,9 +208,6 @@ class DocumentsRepository:
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return self.get(document_id)
-
-        if "category" in updates and updates["category"] not in CATEGORIES:
-            raise ValueError(f"Unknown category {updates['category']!r}.")
 
         updates["updated_at"] = _now()
         assignments = ", ".join(f"{key} = ?" for key in updates)

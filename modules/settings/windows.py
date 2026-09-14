@@ -16,7 +16,7 @@ import customtkinter as ctk
 
 from core.business_settings_service import BusinessSettingsService
 from core.ledger_service import EXPENSE, INCOME, LedgerService
-from core.picklist_service import CUSTOMER_TYPE, LINE_ITEM_TYPE, PAYMENT_TERMS, PicklistService
+from core.picklist_service import CUSTOMER_TYPE, DOCUMENT_CATEGORY, LINE_ITEM_TYPE, PAYMENT_TERMS, PicklistService
 from core.job_cost_item import COST_BUCKETS, JobCostItem, JobCostItemRepository
 from core.supplier_pricing_repository import CATEGORIES as SUPPLIER_PRICE_CATEGORIES
 from core.supplier_pricing_service import SupplierPricingService
@@ -60,6 +60,7 @@ class SettingsWindow(ctk.CTkFrame):
         self._build_addresses_tab()
         self._build_payment_terms_tab()
         self._build_customer_types_tab()
+        self._build_document_types_tab()
         self._build_line_item_types_tab()
         self._build_job_costing_tab()
         self._build_ledger_categories_tab()
@@ -284,6 +285,7 @@ class SettingsWindow(ctk.CTkFrame):
         self._load_addresses()
         self._load_payment_terms()
         self._load_customer_types()
+        self._load_document_types()
         self._load_line_item_types()
         self._load_job_cost_items()
         self._load_ledger_categories()
@@ -504,6 +506,101 @@ class SettingsWindow(ctk.CTkFrame):
                 iid=option.id,
                 text=option.value,
                 values=("Active" if option.is_active else "Inactive",),
+            )
+
+    # --------------------------------------------------
+    # Document types (Documents module category + Annual Compliance
+    # certificate type). Soft-delete only ("recycle") - deleting a type
+    # the type disappears from pickers but stays in the DB so it can be
+    # restored, and any document already filed under it keeps the label
+    # as plain text (category is not a foreign key).
+    # --------------------------------------------------
+
+    def _build_document_types_tab(self):
+
+        tab = self.tabs.add("Document Types")
+        self.document_types_table = build_entity_table(
+            tab,
+            ("Status",),
+            (
+                ("Refresh", self.refresh),
+                ("New Type", self.new_document_type),
+                ("Edit", self.edit_document_type),
+                ("Delete (recycle)", self.delete_document_type),
+                ("Restore", self.restore_document_type),
+            ),
+        )
+
+    def _selected_document_type(self):
+
+        selection = self.document_types_table.selection()
+        if not selection:
+            messagebox.showwarning("Document Types", "Select a document type first.", parent=self.winfo_toplevel())
+            return None
+        return self.picklists.repository.get(selection[0])
+
+    def new_document_type(self):
+
+        self._open_document_type_dialog(self.picklists.new_option(DOCUMENT_CATEGORY), is_new=True)
+
+    def edit_document_type(self):
+
+        option = self._selected_document_type()
+        if option is None:
+            return
+        self._open_document_type_dialog(option, is_new=False)
+
+    def _open_document_type_dialog(self, option, is_new):
+
+        fields = [{"key": "value", "label": "Type Name", "kind": "text", "initial": option.value}]
+        title = "New Document Type" if is_new else f"Edit Document Type — {option.value}"
+        result = EntityFormDialog.ask(self.winfo_toplevel(), title, fields)
+        if result is None:
+            return
+
+        option.value = result["value"]
+
+        try:
+            self.picklists.save_option(option, current_actor())
+        except ValueError as error:
+            messagebox.showerror("Document Types", str(error), parent=self.winfo_toplevel())
+            return
+
+        self.refresh()
+
+    def delete_document_type(self):
+
+        option = self._selected_document_type()
+        if option is None:
+            return
+        if not messagebox.askyesno(
+            "Delete Document Type",
+            f"Move \"{option.value}\" to the recycle bin? It disappears from the picker but can be "
+            "restored, and documents already filed under it keep the label.",
+            parent=self.winfo_toplevel(),
+        ):
+            return
+        self.picklists.deactivate_option(option.id, current_actor())
+        self.refresh()
+
+    def restore_document_type(self):
+
+        option = self._selected_document_type()
+        if option is None:
+            return
+        self.picklists.reactivate_option(option.id, current_actor())
+        self.refresh()
+
+    def _load_document_types(self):
+
+        self.document_types_table.delete(*self.document_types_table.get_children())
+        for option in self.picklists.list_options(DOCUMENT_CATEGORY, include_inactive=True):
+            self.document_types_table.insert(
+                "",
+                "end",
+                iid=option.id,
+                text=option.value,
+                values=("Active" if option.is_active else "Recycled",),
             )
 
     # --------------------------------------------------

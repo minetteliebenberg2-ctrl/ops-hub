@@ -20,11 +20,11 @@ from tkinter import filedialog, messagebox, ttk
 import customtkinter as ctk
 
 from modules.documents.services import (
-    CATEGORIES,
     EXPIRY_WARNING_DAYS,
     DocumentsRepository,
     parse_date,
 )
+from core.picklist_service import DOCUMENT_CATEGORY, PicklistService
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -44,6 +44,14 @@ def open_in_default_app(path):
         subprocess.run(["xdg-open", path], check=False)
 
 
+def _current_actor():
+    import getpass
+    try:
+        return getpass.getuser()
+    except Exception:
+        return ""
+
+
 class DocumentsWindow(ctk.CTkFrame):
 
     columns = ("title", "category", "issued", "expires", "status")
@@ -51,6 +59,7 @@ class DocumentsWindow(ctk.CTkFrame):
     def __init__(self, master, repository=None):
         super().__init__(master)
         self.repository = repository or DocumentsRepository()
+        self.picklists = PicklistService()
         self._documents = []
         self._build_ui()
         self.refresh()
@@ -86,7 +95,8 @@ class DocumentsWindow(ctk.CTkFrame):
         filter_row.pack(fill="x", padx=15, pady=5)
         ctk.CTkLabel(filter_row, text="Category").pack(side="left", padx=(10, 6))
         self.category_filter = ctk.CTkOptionMenu(
-            filter_row, values=["All", *CATEGORIES], command=lambda _: self.refresh(), width=150
+            filter_row, values=["All", *self.picklists.list_values(DOCUMENT_CATEGORY)],
+            command=lambda _: self.refresh(), width=150
         )
         self.category_filter.set("All")
         self.category_filter.pack(side="left", padx=5, pady=8)
@@ -214,7 +224,8 @@ class DocumentsWindow(ctk.CTkFrame):
             return
 
         dialog = DocumentDetailsDialog(self, title="Add Document",
-                                       initial_title=Path(source).stem)
+                                       initial_title=Path(source).stem,
+                                       picklists=self.picklists)
         details = dialog.result
         if details is None:
             return
@@ -255,6 +266,7 @@ class DocumentsWindow(ctk.CTkFrame):
             self, title="Edit Document", initial_title=document.title,
             initial_category=document.category, initial_issue=document.issue_date,
             initial_expiry=document.expiry_date, initial_notes=document.notes,
+            picklists=self.picklists,
         )
         if dialog.result is None:
             return
@@ -301,13 +313,16 @@ class DocumentsWindow(ctk.CTkFrame):
 class DocumentDetailsDialog(ctk.CTkToplevel):
     """Title / category / dates / notes for a document."""
 
+    _ADD_NEW = "+ Add new type..."
+
     def __init__(self, master, title="Document", initial_title="", initial_category="Compliance",
-                 initial_issue="", initial_expiry="", initial_notes=""):
+                 initial_issue="", initial_expiry="", initial_notes="", picklists=None):
         super().__init__(master)
         self.title(title)
         self.geometry("460x360")
         self.resizable(False, False)
         self.result = None
+        self.picklists = picklists or PicklistService()
 
         ctk.CTkLabel(self, text="Title").pack(anchor="w", padx=20, pady=(18, 2))
         self.title_entry = ctk.CTkEntry(self, width=420)
@@ -315,7 +330,9 @@ class DocumentDetailsDialog(ctk.CTkToplevel):
         self.title_entry.pack(padx=20)
 
         ctk.CTkLabel(self, text="Category").pack(anchor="w", padx=20, pady=(12, 2))
-        self.category_menu = ctk.CTkOptionMenu(self, values=list(CATEGORIES), width=420)
+        self.category_menu = ctk.CTkOptionMenu(
+            self, values=self._category_values(), width=420, command=self._on_category_change,
+        )
         self.category_menu.set(initial_category)
         self.category_menu.pack(padx=20)
 
@@ -346,6 +363,32 @@ class DocumentDetailsDialog(ctk.CTkToplevel):
         self.transient(master)
         self.grab_set()
         self.wait_window()
+
+    def _category_values(self):
+        return [*self.picklists.list_values(DOCUMENT_CATEGORY), self._ADD_NEW]
+
+    def _on_category_change(self, choice):
+        if choice != self._ADD_NEW:
+            return
+
+        from tkinter import simpledialog
+        name = simpledialog.askstring("New Document Type", "Type name:", parent=self)
+        name = (name or "").strip()
+        if not name:
+            self.category_menu.set(self.category_menu.cget("values")[0])
+            return
+
+        option = self.picklists.new_option(DOCUMENT_CATEGORY)
+        option.value = name
+        try:
+            self.picklists.save_option(option, _current_actor())
+        except ValueError as error:
+            messagebox.showwarning("Documents", str(error), parent=self)
+            self.category_menu.set(self.category_menu.cget("values")[0])
+            return
+
+        self.category_menu.configure(values=self._category_values())
+        self.category_menu.set(name)
 
     def _save(self):
         title = self.title_entry.get().strip()
