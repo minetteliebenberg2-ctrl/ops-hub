@@ -9,10 +9,12 @@
 # to the same placeholder text when a field is left blank.
 # ==========================================================
 
+import io
 import os
 from datetime import datetime
 
 from docx import Document
+from PIL import Image as _PILImage, ExifTags as _ExifTags
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
@@ -58,6 +60,48 @@ def _val(value, placeholder):
     """Return the real value if set, else the template's placeholder text."""
     value = (value or "").strip()
     return value if value else placeholder
+
+
+_MAX_PX = 1000
+_JPEG_QUALITY = 85
+
+
+def _auto_orient(img):
+    """Rotate a PIL Image to match its EXIF orientation tag, then strip it."""
+    try:
+        exif = img._getexif()
+        if exif:
+            for tag, value in exif.items():
+                if _ExifTags.TAGS.get(tag) == "Orientation":
+                    if value == 3:
+                        img = img.rotate(180, expand=True)
+                    elif value == 6:
+                        img = img.rotate(270, expand=True)
+                    elif value == 8:
+                        img = img.rotate(90, expand=True)
+                    break
+    except (AttributeError, KeyError, IndexError):
+        pass
+    return img
+
+
+def _compress_image(path, manual_rotation=0):
+    """Return a BytesIO JPEG at max 1000x1000 px, quality 85.
+    Applies EXIF auto-orient first, then any manual rotation (degrees CW).
+    Keeps originals untouched; falls back to the raw path on any error."""
+    try:
+        with _PILImage.open(path) as img:
+            img = _auto_orient(img)
+            if manual_rotation:
+                img = img.rotate(-manual_rotation, expand=True)
+            img = img.convert("RGB")
+            img.thumbnail((_MAX_PX, _MAX_PX), _PILImage.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=_JPEG_QUALITY)
+            buf.seek(0)
+            return buf
+    except Exception:
+        return path
 
 
 def set_font(run, size=10.5, color=CHARCOAL, bold=False, italic=False, name=FONT):
@@ -221,7 +265,7 @@ def styled_table(doc, headers, rows, col_widths_cm):
     return table
 
 
-def photo_grid(doc, photo_paths, count=8, cols=4, cell_w_cm=3.7, cell_h_cm=2.3):
+def photo_grid(doc, photo_paths, count=8, cols=4, cell_w_cm=3.7, cell_h_cm=2.3, rotations=None):
     rows_needed = (count + cols - 1) // cols
     table = doc.add_table(rows=rows_needed, cols=cols)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -238,7 +282,8 @@ def photo_grid(doc, photo_paths, count=8, cols=4, cell_w_cm=3.7, cell_h_cm=2.3):
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 run = p.add_run()
                 try:
-                    run.add_picture(photo_path, width=Cm(cell_w_cm - 0.3))
+                    angle = (rotations or {}).get(photo_path, 0)
+                    run.add_picture(_compress_image(photo_path, manual_rotation=angle), width=Cm(cell_w_cm - 0.3))
                 except Exception:
                     shade_cell(cell, PLACEHOLDER_BG)
                     cell_border(cell)
@@ -265,7 +310,7 @@ def add_logo(doc, path, width_cm, alignment=WD_ALIGN_PARAGRAPH.CENTER):
     return p
 
 
-def generate_proposal_docx(data, output_path):
+def generate_proposal_docx(data, output_path, include_terms=False, photo_rotations=None):
     """Build a filled FacilitiesCo proposal document from a ProposalData
     object and save it to output_path."""
 
@@ -315,7 +360,7 @@ def generate_proposal_docx(data, output_path):
         p = cell.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run()
-        run.add_picture(logo_path, width=Cm(5.5))
+        run.add_picture(_compress_image(logo_path), width=Cm(5.5))
     else:
         shade_cell(cell, PLACEHOLDER_BG)
         cell_border(cell)
@@ -387,7 +432,7 @@ def generate_proposal_docx(data, output_path):
     h1(doc, "Site Inspection")
     body(doc, f"Area: {_val(data.site_area, '[SITE / AREA NAME]')}", bold=True, size=12, color=CHARCOAL, space_after=8)
 
-    photo_grid(doc, data.site_photos[:8], count=8, cols=4)
+    photo_grid(doc, data.site_photos[:8], count=8, cols=4, rotations=photo_rotations)
     doc.add_paragraph().paragraph_format.space_after = Pt(4)
 
     h2(doc, "Net Replacement")
@@ -423,7 +468,7 @@ def generate_proposal_docx(data, output_path):
     if len(data.site_photos) > 8:
         page_break(doc)
         h1(doc, "Additional Site Photos")
-        photo_grid(doc, data.site_photos[8:16], count=8, cols=4)
+        photo_grid(doc, data.site_photos[8:16], count=8, cols=4, rotations=photo_rotations)
 
     page_break(doc)
 

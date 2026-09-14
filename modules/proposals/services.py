@@ -62,6 +62,7 @@ class ProposalData:
     painting_medium: str = ""
     painting_full: str = ""
     client_logo_path: str = ""
+    photo_rotations: dict = None  # {photo_path: rotation_degrees} for manual rotate
 
     def __post_init__(self):
         if self.client is None:
@@ -76,6 +77,8 @@ class ProposalData:
             self.timeline_durations = [""] * 6
         if self.site_photos is None:
             self.site_photos = []
+        if self.photo_rotations is None:
+            self.photo_rotations = {}
 
 
 class ProposalService:

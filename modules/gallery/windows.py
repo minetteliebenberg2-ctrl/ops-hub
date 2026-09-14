@@ -167,9 +167,42 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
         self._images = []
         self._selected_customer = None
         self._thumbnails = []
+        self._selected_ids = set()
+        self._check_vars = {}
 
         self._build_ui()
         self.refresh()
+
+        self.bind("<Control-a>", self._on_select_all_shortcut)
+        self.bind("<Control-A>", self._on_select_all_shortcut)
+        self.bind("<Destroy>", self._on_destroy)
+
+    def _on_destroy(self, event):
+        # Only react to this window's own destroy, not a child widget's.
+        if event.widget is self:
+            self.unbind("<Control-a>")
+            self.unbind("<Control-A>")
+
+    def _on_select_all_shortcut(self, event=None):
+        if self._is_text_entry_widget(event.widget if event is not None else None):
+            return None
+        if self._is_text_entry_widget(self.focus_get()):
+            return None
+        self._select_all()
+        return "break"
+
+    @staticmethod
+    def _is_text_entry_widget(widget):
+        if widget is None:
+            return False
+        try:
+            widget_class = widget.winfo_class()
+        except Exception:
+            widget_class = ""
+        if widget_class in ("Entry", "TEntry", "Text", "TCombobox", "ComboBox"):
+            return True
+        type_name = type(widget).__name__
+        return "Entry" in type_name or "Textbox" in type_name or "ComboBox" in type_name
 
     def _build_ui(self):
 
@@ -220,6 +253,21 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
             main_frame, text="", font=("Segoe UI", 11, "bold"), text_color=THEME_TEXT_PRIMARY,
         )
         self.count_label.pack(anchor="w", pady=(0, 6))
+
+        selection_row = ctk.CTkFrame(main_frame, fg_color=THEME_SURFACE)
+        selection_row.pack(fill="x", pady=(0, 12))
+
+        ctk.CTkButton(
+            selection_row, text="Select All", width=100, command=self._select_all,
+        ).pack(side="left", padx=(10, 5), pady=10)
+        ctk.CTkButton(
+            selection_row, text="Clear Selection", width=120, command=self._clear_selection,
+        ).pack(side="left", padx=5, pady=10)
+        self.tag_selected_btn = ctk.CTkButton(
+            selection_row, text="Tag Selected (0)", width=140, state="disabled",
+            command=self._open_bulk_tag_dialog,
+        )
+        self.tag_selected_btn.pack(side="left", padx=5, pady=10)
 
         self.grid_frame = ctk.CTkScrollableFrame(main_frame, fg_color=THEME_SURFACE)
         self.grid_frame.pack(fill="both", expand=True)
@@ -274,6 +322,8 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
         for child in self.grid_frame.winfo_children():
             child.destroy()
         self._thumbnails = []
+        self._selected_ids = set()
+        self._check_vars = {}
 
         customer = self._current_customer()
         self._selected_customer = customer
@@ -324,6 +374,13 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
             self.grid_frame.grid_columnconfigure(column, weight=1)
 
     def _build_thumbnail(self, cell, image, customer):
+
+        check_var = ctk.BooleanVar(value=image.id in self._selected_ids)
+        self._check_vars[image.id] = check_var
+        ctk.CTkCheckBox(
+            cell, text="Select", variable=check_var, width=20, height=20, font=("Segoe UI", 9),
+            command=lambda img_id=image.id, var=check_var: self._on_toggle_select(img_id, var),
+        ).pack(anchor="w", padx=6, pady=(6, 0))
 
         path = self.image_service.image_path(image, customer)
         thumbnail = None
@@ -439,6 +496,103 @@ class ProjectGalleryWindow(ctk.CTkToplevel):
             )
         else:
             messagebox.showinfo("Gallery", f"Added {added} photo(s) to {customer.name}.\n\n{size_info}", parent=self)
+
+
+    # -------------------- bulk selection --------------------
+
+    def _on_toggle_select(self, image_id, var):
+        if var.get():
+            self._selected_ids.add(image_id)
+        else:
+            self._selected_ids.discard(image_id)
+        self._update_tag_selected_button()
+
+    def _select_all(self):
+        """Select every photo currently visible under the active filters."""
+        for image in self._images:
+            self._selected_ids.add(image.id)
+            var = self._check_vars.get(image.id)
+            if var is not None:
+                var.set(True)
+        self._update_tag_selected_button()
+
+    def _clear_selection(self):
+        self._selected_ids = set()
+        for var in self._check_vars.values():
+            var.set(False)
+        self._update_tag_selected_button()
+
+    def _update_tag_selected_button(self):
+        count = len(self._selected_ids)
+        self.tag_selected_btn.configure(
+            text=f"Tag Selected ({count})",
+            state="normal" if count else "disabled",
+        )
+
+    def _open_bulk_tag_dialog(self):
+        if not self._selected_ids:
+            return
+        selected_images = [img for img in self._images if img.id in self._selected_ids]
+        BulkTagDialog(self, selected_images, self.image_service, on_saved=self._on_bulk_tag_saved)
+
+    def _on_bulk_tag_saved(self):
+        self._refresh_filters()
+        self._load_images()
+
+
+class BulkTagDialog(ctk.CTkToplevel):
+    """Add tags to multiple selected photos at once (additive, not replace)."""
+
+    def __init__(self, parent, images, image_service, on_saved=None):
+        super().__init__(parent.winfo_toplevel())
+        self.title("Tag Selected Photos")
+        self.geometry("420x220")
+        self.resizable(False, False)
+        self.configure(fg_color=THEME_DARK_GREY)
+
+        self.images = images
+        self.image_service = image_service
+        self.on_saved = on_saved
+
+        ctk.CTkLabel(
+            self, text=f"Add tags to {len(images)} photo(s)", font=("Segoe UI", 12, "bold"),
+            text_color=THEME_TEXT_PRIMARY, wraplength=380,
+        ).pack(pady=(16, 12), padx=20)
+
+        ctk.CTkLabel(
+            self, text="Tags (comma-separated)", font=("Segoe UI", 10),
+            text_color=THEME_TEXT_SECONDARY, anchor="w",
+        ).pack(fill="x", padx=20)
+        self.tags_entry = ctk.CTkEntry(self, width=380, placeholder_text="e.g. roof, before, cantilever")
+        self.tags_entry.pack(padx=20, pady=(2, 16))
+
+        button_row = ctk.CTkFrame(self, fg_color="transparent")
+        button_row.pack(pady=(0, 16))
+        ctk.CTkButton(button_row, text="Cancel", width=100, fg_color=COLORS["surface_tertiary"],
+                      text_color=COLORS["text_primary"], command=self.destroy).pack(side="left", padx=8)
+        ctk.CTkButton(button_row, text="Apply", width=100, command=self._apply).pack(side="left", padx=8)
+
+    def _apply(self):
+        new_tags = [t.strip() for t in self.tags_entry.get().split(",") if t.strip()]
+        if not new_tags:
+            messagebox.showwarning("Gallery", "Enter at least one tag.", parent=self)
+            return
+
+        actor = current_actor()
+        try:
+            for image in self.images:
+                merged = list(image.tag_list)
+                for tag in new_tags:
+                    if tag not in merged:
+                        merged.append(tag)
+                self.image_service.update_tags(image.id, ", ".join(merged), actor)
+        except Exception as error:
+            messagebox.showerror("Gallery", str(error), parent=self)
+            return
+
+        if self.on_saved:
+            self.on_saved()
+        self.destroy()
 
 
 class EditPhotoDialog(ctk.CTkToplevel):

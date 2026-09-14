@@ -208,7 +208,9 @@ class ProposalFormWindow(ctk.CTkToplevel):
         self.crm_service = CRMService()
         self.proposal = proposal if proposal is not None else self.service.create_proposal("Proposal")
         self.site_photo_paths = list(self.proposal.site_photos or [])
+        self.site_photo_rotations = dict(self.proposal.photo_rotations or {})
         self.logo_path_var = ctk.StringVar(value=self.proposal.client_logo_path or "")
+        self._thumb_refs = []  # prevent GC of thumbnail PhotoImages
 
         self._build_ui()
         if proposal is not None:
@@ -271,6 +273,10 @@ class ProposalFormWindow(ctk.CTkToplevel):
         ctk.CTkButton(photo_row, text="Add Site Photos...", command=self._pick_photos, width=150).pack(side="left", padx=5)
         self.photo_count_label = ctk.CTkLabel(photo_row, text="0 photos added", text_color=THEME_TEXT_SECONDARY)
         self.photo_count_label.pack(side="left", padx=10)
+
+        # Thumbnail strip for selected photos (with rotate buttons)
+        self._thumb_strip = ctk.CTkFrame(inspection, fg_color=THEME_SURFACE)
+        self._thumb_strip.pack(fill="x", padx=10, pady=(0, 5))
 
         self._field(inspection, "net_double_qty", "Net Replacement — Double Qty")
         self._field(inspection, "net_triple_qty", "Net Replacement — Triple Qty")
@@ -374,6 +380,59 @@ class ProposalFormWindow(ctk.CTkToplevel):
         if filename:
             self.logo_path_var.set(filename)
 
+    def _resolve_customer_id(self):
+        cid = getattr(self.proposal.client, "customer_id", None) or ""
+        if cid:
+            return cid
+        name = getattr(self.proposal.client, "company_name", None) or ""
+        if not name.strip():
+            return ""
+        matches = self.crm_service.search_customers(name.strip())
+        for c in matches:
+            if c.name.strip().lower() == name.strip().lower():
+                self.proposal.client.customer_id = c.id
+                return c.id
+        return ""
+
+    def _refresh_thumb_strip(self):
+        """Rebuild the thumbnail strip showing selected photos with rotate buttons."""
+        for widget in self._thumb_strip.winfo_children():
+            widget.destroy()
+        self._thumb_refs = []
+
+        if not self.site_photo_paths:
+            return
+
+        from PIL import Image as _PIL, ImageTk
+
+        for i, path in enumerate(self.site_photo_paths):
+            tile = ctk.CTkFrame(self._thumb_strip, fg_color=THEME_SURFACE_LIGHT, corner_radius=4)
+            tile.grid(row=0, column=i, padx=3, pady=4, sticky="n")
+
+            try:
+                pil = _PIL.open(path)
+                # Apply EXIF auto-orient for display
+                from core.proposal_docx import _auto_orient
+                pil = _auto_orient(pil)
+                # Apply manual rotation for display
+                angle = self.site_photo_rotations.get(path, 0)
+                if angle:
+                    pil = pil.rotate(-angle, expand=True)
+                pil.thumbnail((80, 80), _PIL.Resampling.LANCZOS)
+                tk_img = ImageTk.PhotoImage(pil)
+                self._thumb_refs.append(tk_img)
+                ctk.CTkLabel(tile, image=tk_img, text="").pack(padx=2, pady=(2, 0))
+            except Exception:
+                ctk.CTkLabel(tile, text="\U0001F4F7", font=("Segoe UI", 20),
+                             text_color=THEME_TEXT_SECONDARY).pack(padx=2, pady=(2, 0))
+
+            def _rotate(p=path):
+                self.site_photo_rotations[p] = (self.site_photo_rotations.get(p, 0) + 90) % 360
+                self._refresh_thumb_strip()
+
+            ctk.CTkButton(tile, text="↻", width=28, height=22,
+                          font=("Segoe UI", 14), command=_rotate).pack(pady=(1, 2))
+
     def _pick_photos(self):
         filenames = filedialog.askopenfilenames(
             title="Select site photos (up to 8)",
@@ -383,6 +442,7 @@ class ProposalFormWindow(ctk.CTkToplevel):
             self.site_photo_paths.extend(filenames)
             self.site_photo_paths = self.site_photo_paths[:8]
             self.photo_count_label.configure(text=f"{len(self.site_photo_paths)} photo(s) added")
+            self._refresh_thumb_strip()
 
     def _populate_form(self):
         """Fill UI fields from an existing ProposalData (when opening a saved proposal)."""
@@ -400,6 +460,8 @@ class ProposalFormWindow(ctk.CTkToplevel):
             entry.delete(0, "end")
             entry.insert(0, val or "")
         self.photo_count_label.configure(text=f"{len(self.site_photo_paths)} photo(s) added")
+        self.site_photo_rotations = dict(self.proposal.photo_rotations or {})
+        self._refresh_thumb_strip()
 
     def _collect(self):
         """Copy form field values onto the in-memory ProposalData object."""
@@ -420,6 +482,7 @@ class ProposalFormWindow(ctk.CTkToplevel):
         p.painting_medium = self.entries["painting_medium"].get().strip()
         p.painting_full = self.entries["painting_full"].get().strip()
         p.site_photos = list(self.site_photo_paths)
+        p.photo_rotations = dict(self.site_photo_rotations)
         return p
 
     def _export_docx(self):
@@ -431,7 +494,7 @@ class ProposalFormWindow(ctk.CTkToplevel):
 
         # Auto-file into the customer's Paperwork folder when possible.
         filename = None
-        customer_id = getattr(self.proposal.client, "customer_id", None)
+        customer_id = self._resolve_customer_id()
         if customer_id:
             try:
                 from core.client_document_saver import ClientDocumentSaver, safe_filename
@@ -455,8 +518,11 @@ class ProposalFormWindow(ctk.CTkToplevel):
             return
 
         data = self._collect()
+        include_terms = getattr(self, "_include_terms_var", None)
+        include_terms = include_terms.get() if include_terms else False
         try:
-            generate_proposal_docx(data, filename)
+            generate_proposal_docx(data, filename, include_terms=include_terms,
+                                   photo_rotations=data.photo_rotations)
         except Exception as error:
             messagebox.showerror("Export Failed", str(error), parent=self)
             return
