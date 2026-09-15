@@ -81,7 +81,7 @@ class CRMWindow(ctk.CTkFrame):
 
         # Search box
         self.search_var = ctk.StringVar()
-        self.search_var.trace("w", lambda *_: self._refresh_list())
+        self.search_var.trace_add("write", lambda *_: self._refresh_list())
         search = ctk.CTkEntry(
             toolbar,
             placeholder_text="Search customers...",

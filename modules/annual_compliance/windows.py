@@ -363,8 +363,9 @@ class AnnualReturnDialog(ctk.CTkToplevel):
         ar.notes = self._notes.get("1.0", "end").strip()
 
         self._repo.save(ar)
-        self._on_save()
+        on_save = self._on_save
         self.destroy()
+        on_save()
 
 
 class PayslipDialog(ctk.CTkToplevel):
@@ -450,8 +451,9 @@ class PayslipDialog(ctk.CTkToplevel):
             net_salary=net, pdf_path=pdf_path,
         )
         self._repo.save(slip)
-        self._on_save()
+        on_save = self._on_save
         self.destroy()
+        on_save()
         _open_file(pdf_path)
 
 

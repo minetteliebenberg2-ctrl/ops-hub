@@ -358,7 +358,7 @@ class ProposalFormWindow(ctk.CTkToplevel):
         def on_search(*args):
             populate_list(search_var.get())
 
-        search_var.trace("w", on_search)
+        search_var.trace_add("write", on_search)
 
     def _select_customer(self, customer, dialog):
         self.proposal.client.company_name = customer.name

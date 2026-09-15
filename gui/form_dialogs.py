@@ -27,6 +27,8 @@ class EntityFormDialog(ctk.CTkToplevel):
         self.geometry("480x560")
         self.transient(master)
         self.grab_set()
+        self.lift()
+        self.focus_force()
 
         self.fields = fields
         self.widgets = {}
@@ -140,6 +142,8 @@ class TextPromptDialog(ctk.CTkToplevel):
         self.geometry("420x200")
         self.transient(master)
         self.grab_set()
+        self.lift()
+        self.focus_force()
 
         self.required = required
         self.result = None
@@ -196,6 +200,8 @@ class SavedDocumentDialog(ctk.CTkToplevel):
         self.geometry("560x260")
         self.transient(master)
         self.grab_set()
+        self.lift()
+        self.focus_force()
 
         self.path = path
 

@@ -147,7 +147,7 @@ class DashboardView(ctk.CTkFrame):
         top.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], SPACING["sm"]))
 
         self._client_search_var = ctk.StringVar()
-        self._client_search_var.trace("w", lambda *_: self._filter_clients())
+        self._client_search_var.trace_add("write", lambda *_: self._filter_clients())
         search = ctk.CTkEntry(
             top, placeholder_text="Search clients...",
             textvariable=self._client_search_var,
