@@ -122,6 +122,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     (54, "quote_print_address_flags"),
                     (55, "job_cost_allocations"),
                     (56, "document_category_picklist"),
+                    (57, "split_invoice"),
                 ],
             )
             self.assertEqual(user_version, MigrationRunner(database).latest_version)
@@ -443,6 +444,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     "quote_print_address_flags",
                     "job_cost_allocations",
                     "document_category_picklist",
+                    "split_invoice",
                 ],
             )
 

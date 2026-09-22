@@ -67,7 +67,7 @@ def test_create_job_card_allocates_a_yearly_number(job_card_service, customer_an
 
     job_card = job_card_service.create_job_card(customer, site, "minette", purchase_order="8295")
 
-    assert job_card.job_card_number.startswith("J_")
+    assert job_card.job_card_number.startswith("COS-J_")
     assert job_card.customer_id == customer.id
     assert job_card.site_id == site.id
     assert job_card.purchase_order == "8295"

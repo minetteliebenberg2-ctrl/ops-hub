@@ -31,6 +31,8 @@ class MainWindow:
         self.master.geometry("1600x900")
         self.master.minsize(1200, 700)
         self.master.state("zoomed")
+        from gui.window_state import maximise_on_launch
+        maximise_on_launch(self.master)
 
         # Configure main window background
         self.master.configure(fg_color=COLORS["surface_primary"])

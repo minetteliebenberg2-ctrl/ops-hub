@@ -166,14 +166,39 @@ def generate_proforma_pdf(document, quote, line_items, customer, site, business_
     )
 
 
-def generate_invoice_pdf(document, quote, line_items, customer, site, business_settings, output_path, billing_address=None, site_address=None, delivery_address=None, postal_address=None, contact_name=None):
+def generate_invoice_pdf(document, quote, line_items, customer, site, business_settings, output_path, billing_address=None, site_address=None, delivery_address=None, postal_address=None, contact_name=None, deposit_document=None):
+    """Tax Invoice. document.invoice_part selects the variant:
+    '' = normal, 'deposit' = one '65% deposit on <quote>' line,
+    'balance' = all quote items + full total, less the deposit invoice,
+    balance due. deposit_document names the deposit on a balance invoice."""
     return _generate_quote_derived_pdf(
         TAX_INVOICE, document, quote, line_items, customer, site, business_settings, output_path,
         billing_address=billing_address, site_address=site_address, delivery_address=delivery_address, postal_address=postal_address, contact_name=contact_name,
+        deposit_document=deposit_document,
     )
 
 
-def _generate_quote_derived_pdf(doc_type, document, quote, line_items, customer, site, business_settings, output_path, billing_address=None, site_address=None, delivery_address=None, postal_address=None, contact_name=None):
+def _split_totals_table(rows, bold_row):
+    table = Table(rows, colWidths=[70 * mm, 35 * mm], hAlign="RIGHT")
+    table.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("FONTNAME", (0, 0), (-1, -1), BODY_FONT),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("TEXTCOLOR", (0, 0), (-1, -1), INK_COLOR),
+        ("FONTNAME", (0, bold_row), (-1, bold_row), BOLD_FONT),
+        ("FONTSIZE", (0, bold_row), (-1, bold_row), 12),
+        ("BACKGROUND", (0, bold_row), (-1, bold_row), ACCENT_TINT),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("LINEABOVE", (0, bold_row), (-1, bold_row), 0.8, ACCENT_COLOR),
+    ]))
+    return table
+
+
+def _generate_quote_derived_pdf(doc_type, document, quote, line_items, customer, site, business_settings, output_path, billing_address=None, site_address=None, delivery_address=None, postal_address=None, contact_name=None, deposit_document=None):
+
+    invoice_part = getattr(document, "invoice_part", "") or ""
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -247,13 +272,23 @@ def _generate_quote_derived_pdf(doc_type, document, quote, line_items, customer,
     story.append(Spacer(1, 10 * mm))
 
     table_data = [["Description", "Qty", "Unit Price", "Amount"]]
-    for item in line_items:
+    if invoice_part == "deposit":
         table_data.append([
-            Paragraph(format_line_item_description(item), styles["body"]),
-            f"{item.quantity:g}",
-            format_money(item.unit_price_minor, quote.currency),
-            format_money(item.amount_minor, quote.currency),
+            Paragraph(f"65% deposit on {format_quote_number(quote)}", styles["body"]),
+            "1",
+            format_money(document.total_minor, quote.currency),
+            format_money(document.total_minor, quote.currency),
         ])
+        shown_rows = 1
+    else:
+        for item in line_items:
+            table_data.append([
+                Paragraph(format_line_item_description(item), styles["body"]),
+                f"{item.quantity:g}",
+                format_money(item.unit_price_minor, quote.currency),
+                format_money(item.amount_minor, quote.currency),
+            ])
+        shown_rows = len(line_items)
 
     items_table = Table(table_data, colWidths=[102 * mm, 18 * mm, 30 * mm, 32 * mm], repeatRows=1)
     items_table.setStyle(TableStyle([
@@ -271,9 +306,28 @@ def _generate_quote_derived_pdf(doc_type, document, quote, line_items, customer,
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     story.append(items_table)
-    story.append(Spacer(1, push_down_spacer_mm(len(line_items)) * mm))
+    story.append(Spacer(1, push_down_spacer_mm(shown_rows) * mm))
 
-    tail = [_totals_table(quote), Spacer(1, 6 * mm)]
+    if invoice_part == "deposit":
+        rows = []
+        if document.vat_minor:
+            rows.append(["Subtotal", format_money(document.subtotal_minor, quote.currency)])
+            rows.append(["VAT", format_money(document.vat_minor, quote.currency)])
+        rows.append(["Deposit due", format_money(document.total_minor, quote.currency)])
+        totals = _split_totals_table(rows, len(rows) - 1)
+    elif invoice_part == "balance":
+        deposit_minor = deposit_document.total_minor if deposit_document is not None else quote.total_minor - document.total_minor
+        deposit_ref = deposit_document.document_number if deposit_document is not None else "deposit"
+        rows = [["Subtotal", format_money(quote.subtotal_minor, quote.currency)]]
+        if quote.vat_minor:
+            rows.append(["VAT", format_money(quote.vat_minor, quote.currency)])
+        rows.append(["Total", format_money(quote.total_minor, quote.currency)])
+        rows.append([f"Less deposit invoiced ({deposit_ref})", "-" + format_money(deposit_minor, quote.currency)])
+        rows.append(["Balance due", format_money(document.total_minor, quote.currency)])
+        totals = _split_totals_table(rows, len(rows) - 1)
+    else:
+        totals = _totals_table(quote)
+    tail = [totals, Spacer(1, 6 * mm)]
 
     if document.notes:
         tail.append(Paragraph("NOTES", styles["label"]))
@@ -300,7 +354,7 @@ def _generate_quote_derived_pdf(doc_type, document, quote, line_items, customer,
     return output_path
 
 
-def generate_statement_pdf(statement, invoices, customer, business_settings, output_path, billing_address=None, delivery_address=None):
+def generate_statement_pdf(statement, invoices, customer, business_settings, output_path, billing_address=None, delivery_address=None, lines=None):
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -358,16 +412,28 @@ def generate_statement_pdf(statement, invoices, customer, business_settings, out
     story.append(layout_table)
     story.append(Spacer(1, 10 * mm))
 
-    table_data = [["Invoice #", "Date", "Due Date", "Amount"]]
-    for invoice in invoices:
-        table_data.append([
-            invoice.document_number,
-            invoice.issue_date,
-            invoice.due_date or "—",
-            format_money(invoice.total_minor, invoice.currency),
-        ])
+    if lines is not None:
+        table_data = [["Reference", "Date", "Description", "Amount"]]
+        for line in lines:
+            table_data.append([
+                line["ref"],
+                (line["date"] or "")[:10] or "—",
+                Paragraph(line["description"], styles["body"]),
+                format_money(line["amount_minor"], line.get("currency") or statement.currency),
+            ])
+        invoices = lines
+    else:
+        table_data = [["Invoice #", "Date", "Due Date", "Amount"]]
+        for invoice in invoices:
+            table_data.append([
+                invoice.document_number,
+                invoice.issue_date,
+                invoice.due_date or "—",
+                format_money(invoice.total_minor, invoice.currency),
+            ])
 
-    items_table = Table(table_data, colWidths=[50 * mm, 30 * mm, 30 * mm, 72 * mm], repeatRows=1)
+    col_widths = [45 * mm, 25 * mm, 72 * mm, 40 * mm] if lines is not None else [50 * mm, 30 * mm, 30 * mm, 72 * mm]
+    items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
     items_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), INK_COLOR),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -408,7 +474,7 @@ def generate_statement_pdf(statement, invoices, customer, business_settings, out
     # Same banking + fine print box as the other document types - a Statement is
     # asking to be paid, so it needs the banking details just as much.
     tail.append(_terms_box(business_settings, styles, [
-        "Please use the invoice number as reference when making payment. "
+        "Please use the document number as reference when making payment. "
         + PROOF_OF_PAYMENT_NOTE
     ]))
     story.extend(tail)

@@ -169,9 +169,9 @@ def test_quote_number_is_scoped_per_customer(crm_service, quote_service):
     number3 = quote_service.issue_quote(quote3.id, "minette")
 
     yy = f"{datetime.now().year % 100:02d}"
-    assert number1 == f"Q_{yy}/001"
-    assert number2 == f"Q_{yy}/002"
-    assert number3 == f"Q_{yy}/001"
+    assert number1 == f"KOM-Q_{yy}/001"
+    assert number2 == f"KOM-Q_{yy}/002"
+    assert number3 == f"REB-Q_{yy}/001"
 
 
 def test_cannot_issue_a_quote_with_no_line_items(crm_service, quote_service):

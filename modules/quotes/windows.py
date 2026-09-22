@@ -19,6 +19,7 @@ import customtkinter as ctk
 from gui.components.date_picker import DateEntry
 
 from core.address import Address
+from core.quote_document import BALANCE_PERCENT, DEPOSIT_PERCENT
 from core.business_document_pdf import generate_invoice_pdf, generate_proforma_pdf, generate_statement_pdf
 from core.business_settings_service import BusinessSettingsService
 from core.crm_service import CRMService
@@ -104,12 +105,18 @@ class QuotesWindow(ctk.CTkFrame):
                 ("Open", self.open_quote),
                 ("Delete Draft", self.delete_draft),
                 ("Delete Quote", self.delete_quote),
+                ("Statement", self.open_statement),
             ),
         )
         self.table.bind("<Double-1>", lambda _event: self.open_quote())
 
         self._customers_by_id = {}
         self.refresh()
+
+    def open_statement(self):
+        selected = self.table.selection()
+        quote = self.quote_service.get_quote(selected[0]) if selected else None
+        StatementEditorWindow(self.winfo_toplevel(), customer_id=quote.customer_id if quote else None)
 
     def refresh(self):
         self._customers_by_id = {c.id: c for c in self.crm_service.list_customers()}
@@ -325,10 +332,30 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         doc_row.pack(fill="x", padx=20, pady=(0, 10))
         ctk.CTkLabel(doc_row, text="Generate from this Quote:", anchor="w").pack(side="left", padx=(0, 8))
         ctk.CTkButton(doc_row, text="Pro-Forma", command=self.generate_pro_forma, width=110).pack(side="left", padx=4)
-        ctk.CTkButton(doc_row, text="Tax Invoice", command=self.generate_tax_invoice, width=110).pack(side="left", padx=4)
+        # Tax Invoice slot: one "Tax Invoice" button, or Deposit + Balance
+        # buttons when "Split deposit / balance" is ticked (2026-09-22).
+        invoice_slot = ctk.CTkFrame(doc_row, fg_color="transparent")
+        invoice_slot.pack(side="left")
+        self._tax_invoice_btn = ctk.CTkButton(invoice_slot, text="Tax Invoice", command=self.generate_tax_invoice, width=110)
+        self._deposit_invoice_btn = ctk.CTkButton(
+            invoice_slot, text=f"Deposit Invoice ({DEPOSIT_PERCENT}%)", command=self.generate_deposit_invoice, width=160,
+        )
+        self._balance_invoice_btn = ctk.CTkButton(
+            invoice_slot, text=f"Balance Invoice ({BALANCE_PERCENT}%)", command=self.generate_balance_invoice, width=160,
+        )
+        self._tax_invoice_btn.pack(side="left", padx=4)
+        ctk.CTkButton(doc_row, text="Statement", command=self.open_statement, width=110).pack(side="left", padx=4)
 
         self._site_plan_btn = ctk.CTkButton(doc_row, text="Open Site Plan", command=self._open_site_plan, width=130)
         self._job_card_btn = ctk.CTkButton(doc_row, text="Open Job Card", command=self._open_job_card, width=130)
+
+        self._split_invoice_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            doc_row, text="Split deposit / balance",
+            variable=self._split_invoice_var,
+            command=self._save_split_invoice,
+            width=170,
+        ).pack(side="right", padx=(4, 8))
 
         grid_header = ctk.CTkFrame(self)
         grid_header.pack(fill="x", padx=20, pady=(0, 0))
@@ -401,6 +428,8 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         self.registration_combo.set(default_registration)
         self.bill_to_entry.delete(0, "end")
         self.bill_to_entry.insert(0, quote.bill_to_name or (customer.name if customer else ""))
+        self._split_invoice_var.set(quote.split_invoice)
+        self._show_invoice_buttons(quote.split_invoice)
 
         self._editable = quote.status == "Draft"
         self.add_row_button.configure(state="normal" if self._editable else "disabled")
@@ -807,7 +836,12 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         self.quote_service.set_status(self.quote_id, status, current_actor())
         if status == "Accepted":
             self._offer_job_card()
+            self.open_statement()
         self.refresh()
+
+    def open_statement(self):
+        quote = self.quote_service.get_quote(self.quote_id)
+        StatementEditorWindow(self.winfo_toplevel(), customer_id=quote.customer_id if quote else None)
 
     def _offer_job_card(self):
         from core.job_card_service import JobCardService
@@ -948,6 +982,25 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         quote.bill_to_name = new_value
         self.quote_service.save_quote(quote, current_actor())
         self.refresh()
+
+    def _save_split_invoice(self):
+
+        quote = self.quote_service.get_quote(self.quote_id)
+        if quote is None:
+            return
+        quote.split_invoice = self._split_invoice_var.get()
+        self.quote_service.save_quote(quote, current_actor())
+        self._show_invoice_buttons(quote.split_invoice)
+
+    def _show_invoice_buttons(self, split):
+
+        for button in (self._tax_invoice_btn, self._deposit_invoice_btn, self._balance_invoice_btn):
+            button.pack_forget()
+        if split:
+            self._deposit_invoice_btn.pack(side="left", padx=4)
+            self._balance_invoice_btn.pack(side="left", padx=4)
+        else:
+            self._tax_invoice_btn.pack(side="left", padx=4)
 
     def edit_billing_delivery_address(self):
         """Add or edit the customer's Billing/Delivery address without
@@ -1156,6 +1209,28 @@ class QuoteDetailWindow(ctk.CTkToplevel):
             label="Tax Invoice",
         )
 
+    def generate_deposit_invoice(self):
+        self._generate_document(
+            generator=self.quote_documents.generate_deposit_invoice,
+            pdf_builder=generate_invoice_pdf,
+            label="Deposit Invoice",
+        )
+
+    def generate_balance_invoice(self):
+        if self.quote_documents.deposit_invoice_for_quote(self.quote_id) is None:
+            messagebox.showinfo(
+                "Balance Invoice",
+                f"Generate the Deposit Invoice ({DEPOSIT_PERCENT}%) first. "
+                "The balance invoice deducts the deposit, so it needs the deposit invoice number.",
+                parent=self,
+            )
+            return
+        self._generate_document(
+            generator=self.quote_documents.generate_balance_invoice,
+            pdf_builder=generate_invoice_pdf,
+            label="Balance Invoice",
+        )
+
     def _generate_document(self, generator, pdf_builder, label):
 
         try:
@@ -1176,12 +1251,16 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         contact_name = primary.name if primary and primary.name else None
 
         default_name = f"{document.document_number}.pdf".replace("/", "-")
+        extra = {}
+        if getattr(document, "invoice_part", "") == "balance":
+            extra["deposit_document"] = self.quote_documents.deposit_invoice_for_quote(self.quote_id)
 
         def build(output_path):
             pdf_builder(
                 document, quote, line_items, customer, site, business, output_path,
                 billing_address=billing_address, site_address=site_address, delivery_address=delivery_address,
                 postal_address=postal_address, contact_name=contact_name,
+                **extra,
             )
 
         file_document_for_customer(
@@ -1315,3 +1394,186 @@ class PricingOptionsDialog(ctk.CTkToplevel):
         dialog = cls(parent, row_count)
         dialog.wait_window()
         return dialog.result
+
+
+class StatementEditorWindow(ctk.CTkToplevel):
+    """Editable customer Statement. Pre-fills one line per quote at its
+    furthest stage (Tax Invoice > Pro-Forma > Accepted Quote); every line
+    can be edited, removed, or added to (adjustments, payments received as
+    negative amounts) before the PDF is saved. Restored 2026-09-22 after the
+    Statements tab was lost in the 5a74e86 redesign."""
+
+    def __init__(self, parent, customer_id=None):
+        super().__init__(parent)
+        self.title("Statement")
+        self.geometry("900x640")
+
+        self.crm_service = CRMService()
+        self.statement_service = StatementService()
+        self.business_settings = BusinessSettingsService()
+        self._rows = []
+
+        top = ctk.CTkFrame(self, fg_color="transparent")
+        top.pack(fill="x", padx=16, pady=(16, 8))
+
+        customers = self.crm_service.list_customers()
+        self._customer_by_label = {f"{c.customer_number} — {c.name}": c for c in customers}
+        labels = list(self._customer_by_label.keys())
+        initial = next((l for l, c in self._customer_by_label.items() if c.id == customer_id), labels[0] if labels else "")
+        ctk.CTkLabel(top, text="Customer:").pack(side="left")
+        self.customer_var = ctk.StringVar(value=initial)
+        ctk.CTkOptionMenu(top, variable=self.customer_var, values=labels or ["(no customers)"], width=300,
+                          command=lambda _v: self._reload()).pack(side="left", padx=(4, 12))
+
+        today = date.today()
+        ctk.CTkLabel(top, text="From:").pack(side="left")
+        self.start_entry = DateEntry(top, value=today.replace(month=1, day=1).strftime("%Y-%m-%d"))
+        self.start_entry.pack(side="left", padx=4)
+        ctk.CTkLabel(top, text="To:").pack(side="left")
+        self.end_entry = DateEntry(top, value=today.strftime("%Y-%m-%d"))
+        self.end_entry.pack(side="left", padx=4)
+        ctk.CTkButton(top, text="Reload", width=80, command=self._reload).pack(side="left", padx=8)
+
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=16)
+        for text, width in (("Reference", 150), ("Date", 110), ("Description", 330), ("Amount (R)", 120)):
+            ctk.CTkLabel(header, text=text, width=width, anchor="w", font=("Segoe UI", 12, "bold")).pack(side="left", padx=2)
+
+        self.rows_frame = ctk.CTkScrollableFrame(self, height=330)
+        self.rows_frame.pack(fill="both", expand=True, padx=16, pady=4)
+
+        bottom = ctk.CTkFrame(self, fg_color="transparent")
+        bottom.pack(fill="x", padx=16, pady=4)
+        ctk.CTkButton(
+            bottom, text="+ Add Adjustment Line", width=170,
+            command=lambda: self._add_row({"ref": "", "date": date.today().strftime("%Y-%m-%d"),
+                                           "description": "Adjustment", "amount_minor": 0}),
+        ).pack(side="left")
+        ctk.CTkLabel(bottom, text="Use a minus amount for payments received / credits.",
+                     text_color=COLORS["text_secondary"]).pack(side="left", padx=10)
+        self.total_label = ctk.CTkLabel(bottom, text="Total: R 0.00", font=("Segoe UI", 14, "bold"))
+        self.total_label.pack(side="right")
+
+        ctk.CTkLabel(self, text="Notes (printed on statement):", anchor="w").pack(fill="x", padx=16)
+        self.notes_box = ctk.CTkTextbox(self, height=60)
+        self.notes_box.pack(fill="x", padx=16, pady=(2, 8))
+
+        actions = ctk.CTkFrame(self, fg_color="transparent")
+        actions.pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(actions, text="Close", width=90, command=self.destroy).pack(side="right", padx=4)
+        ctk.CTkButton(actions, text="Save Statement PDF", width=170, command=self._generate).pack(side="right", padx=4)
+
+        self._reload()
+        self.after(100, self._force_front)
+
+    def _force_front(self):
+        if not self.winfo_exists():
+            return
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after(200, lambda: self.winfo_exists() and self.attributes("-topmost", False))
+        self.focus_force()
+
+    def _customer(self):
+        return self._customer_by_label.get(self.customer_var.get())
+
+    def _reload(self):
+        for row in self._rows:
+            row["frame"].destroy()
+        self._rows = []
+        customer = self._customer()
+        if customer is not None:
+            try:
+                lines = self.statement_service.build_lines(customer.id, self.start_entry.get(), self.end_entry.get())
+            except Exception as error:
+                messagebox.showerror("Statement", str(error), parent=self)
+                lines = []
+            for line in lines:
+                self._add_row(line)
+        self._update_total()
+
+    def _add_row(self, line):
+        frame = ctk.CTkFrame(self.rows_frame, fg_color="transparent")
+        frame.pack(fill="x", pady=1)
+        entries = {}
+        for key, width in (("ref", 150), ("date", 110), ("description", 330), ("amount", 120)):
+            entry = ctk.CTkEntry(frame, width=width)
+            value = f"{line['amount_minor'] / 100:.2f}" if key == "amount" else (line.get(key) or "")
+            entry.insert(0, value)
+            entry.pack(side="left", padx=2)
+            entries[key] = entry
+        entries["amount"].bind("<KeyRelease>", lambda _e: self._update_total())
+        row = {"frame": frame, "entries": entries, "document_id": line.get("document_id", "")}
+        ctk.CTkButton(frame, text="✕", width=30, fg_color="#B04040", hover_color="#8A3030",
+                      command=lambda: self._remove_row(row)).pack(side="left", padx=4)
+        self._rows.append(row)
+        self._update_total()
+
+    def _remove_row(self, row):
+        row["frame"].destroy()
+        self._rows.remove(row)
+        self._update_total()
+
+    @staticmethod
+    def _parse_amount(text):
+        cleaned = text.replace("R", "").replace(",", "").replace(" ", "").strip()
+        if not cleaned:
+            return 0
+        return int(round(float(cleaned) * 100))
+
+    def _collect_lines(self):
+        lines = []
+        for row in self._rows:
+            e = row["entries"]
+            lines.append({
+                "ref": e["ref"].get().strip(),
+                "date": e["date"].get().strip(),
+                "description": e["description"].get().strip(),
+                "amount_minor": self._parse_amount(e["amount"].get()),
+                "document_id": row["document_id"],
+                "currency": "ZAR",
+            })
+        return lines
+
+    def _update_total(self):
+        try:
+            total = sum(self._parse_amount(r["entries"]["amount"].get()) for r in self._rows)
+            self.total_label.configure(text=f"Total: {format_money(total, 'ZAR')}")
+        except ValueError:
+            self.total_label.configure(text="Total: (check amounts)")
+
+    def _generate(self):
+        customer = self._customer()
+        if customer is None:
+            messagebox.showwarning("Statement", "Select a customer first.", parent=self)
+            return
+        try:
+            lines = self._collect_lines()
+        except ValueError:
+            messagebox.showerror("Statement", "One of the amounts is not a valid number.", parent=self)
+            return
+        notes = self.notes_box.get("1.0", "end").strip()
+        try:
+            statement = self.statement_service.save_statement(
+                customer.id, self.start_entry.get(), self.end_entry.get(), lines, current_actor(), notes=notes,
+            )
+        except ValueError as error:
+            messagebox.showerror("Statement", str(error), parent=self)
+            return
+
+        addresses = self.crm_service.list_addresses(customer.id)
+        billing_address = next(
+            (a for a in addresses if a.address_type == "Billing" and a.is_primary),
+            next((a for a in addresses if a.address_type == "Billing"), None),
+        )
+
+        def build(output_path):
+            generate_statement_pdf(
+                statement, [], customer, self.business_settings.get_settings(), output_path,
+                billing_address=billing_address, lines=lines,
+            )
+
+        file_document_for_customer(
+            self, customer, f"{statement.document_number}.pdf".replace("/", "-"), build,
+            title="Statement", heading=f"Statement {statement.document_number} saved",
+        )

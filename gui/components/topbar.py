@@ -73,6 +73,21 @@ class TopBar(ctk.CTkFrame):
         self.right_frame = ctk.CTkFrame(container, fg_color="transparent")
         self.right_frame.pack(side="right", fill="y")
 
+        # Maximise (every page) - fallback for PCs where launch zoom fails
+        self.max_btn = ctk.CTkButton(
+            self.right_frame,
+            text="⛶  Full screen",
+            font=FONTS["body_md"],
+            fg_color="transparent",
+            text_color=COLORS["text_secondary"],
+            hover_color=COLORS["surface_tertiary"],
+            width=110,
+            height=32,
+            border_width=0,
+            command=self._on_maximise,
+        )
+        self.max_btn.pack(side="left", padx=(0, SPACING["md"]))
+
         # Search box
         self.search_var = ctk.StringVar()
         self.search_entry = ctk.CTkEntry(
@@ -139,3 +154,7 @@ class TopBar(ctk.CTkFrame):
         """Handle home button click."""
         if self.on_home:
             self.on_home()
+
+    def _on_maximise(self):
+        from gui.window_state import maximise
+        maximise(self.winfo_toplevel())

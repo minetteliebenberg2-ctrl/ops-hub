@@ -27,7 +27,7 @@ class QuoteDocumentRepository:
 
     # --------------------------------------------------
 
-    def generate(self, quote, doc_type, prefix, issue_date, due_date, notes, actor, po_number="", vat_number="", registration_number="", bill_to_name=""):
+    def generate(self, quote, doc_type, prefix, issue_date, due_date, notes, actor, po_number="", vat_number="", registration_number="", bill_to_name="", invoice_part="", subtotal_minor=None, vat_minor=None, total_minor=None):
         """Snapshot the given (issued) quote's totals into a new
         Pro-Forma/Tax Invoice, allocating its number in the same
         Q_/PF_/I_/STA_ family, scoped to the quote's customer and reset
@@ -58,12 +58,13 @@ class QuoteDocumentRepository:
                 notes=notes,
                 status="Issued",
                 currency=quote.currency,
-                subtotal_minor=quote.subtotal_minor,
-                vat_minor=quote.vat_minor,
-                total_minor=quote.total_minor,
+                subtotal_minor=quote.subtotal_minor if subtotal_minor is None else subtotal_minor,
+                vat_minor=quote.vat_minor if vat_minor is None else vat_minor,
+                total_minor=quote.total_minor if total_minor is None else total_minor,
                 created_at=now,
                 updated_at=now,
                 created_by=actor,
+                invoice_part=invoice_part,
             )
 
             connection.execute(
@@ -73,9 +74,9 @@ class QuoteDocumentRepository:
                     issue_date, due_date, po_number, vat_number, registration_number,
                     bill_to_name, notes, status, currency,
                     subtotal_minor, vat_minor, total_minor,
-                    created_at, updated_at, created_by
+                    created_at, updated_at, created_by, invoice_part
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     document.id, document.quote_id, document.customer_id,
@@ -85,6 +86,7 @@ class QuoteDocumentRepository:
                     document.status, document.currency,
                     document.subtotal_minor, document.vat_minor, document.total_minor,
                     document.created_at, document.updated_at, document.created_by,
+                    document.invoice_part,
                 ),
             )
 
@@ -170,6 +172,7 @@ class QuoteDocumentRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=row["created_by"],
+            invoice_part=(row["invoice_part"] or "") if "invoice_part" in row.keys() else "",
         )
 
     # --------------------------------------------------

@@ -36,6 +36,7 @@ class Quote:
     print_billing_address: bool = True
     print_delivery_address: bool = False
     print_postal_address: bool = False
+    split_invoice: bool = False
     notes: str = ""
     revision_of_quote_id: str = ""
     revision_number: int = 0

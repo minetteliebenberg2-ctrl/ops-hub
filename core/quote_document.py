@@ -14,6 +14,12 @@ from dataclasses import dataclass
 PRO_FORMA = "Pro-Forma"
 TAX_INVOICE = "Tax Invoice"
 
+# Split deposit / balance invoicing (invoice_part on quote_documents)
+DEPOSIT = "deposit"
+BALANCE = "balance"
+DEPOSIT_PERCENT = 65
+BALANCE_PERCENT = 35
+
 
 @dataclass
 class QuoteDocument:
@@ -38,3 +44,4 @@ class QuoteDocument:
     created_at: str = ""
     updated_at: str = ""
     created_by: str = ""
+    invoice_part: str = ""

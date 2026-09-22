@@ -63,6 +63,27 @@ def push_down_spacer_mm(row_count, baseline_rows=3, max_push_mm=45, min_push_mm=
     return max(min_push_mm, max_push_mm - shrink)
 
 
+def _filler_row_count(story, tail, build_items_table, width, height, safety_mm=4):
+    """How many empty ruled rows fit before the tail would spill onto a
+    second page. 0 if the quote already fills (or overflows) page 1."""
+
+    def total_height(flowables):
+        return sum(
+            f.wrap(width, height)[1] + f.getSpaceBefore() + f.getSpaceAfter()
+            for f in flowables
+        )
+
+    height -= 12  # SimpleDocTemplate frame padding (6pt top + 6pt bottom)
+    used = total_height(story) + total_height(tail)
+    if used >= height:
+        return 0
+    base = build_items_table(0).wrap(width, height)[1]
+    row_height = build_items_table(1).wrap(width, height)[1] - base
+    if row_height <= 0:
+        return 0
+    return max(0, int((height - used - safety_mm * mm) // row_height))
+
+
 def resolved_or_tbc(value):
     """PO Number / VAT No are permanent fields on the PDF meta block -
     Minette wants a visible, deliberate value there (an actual number,
@@ -256,8 +277,10 @@ def generate_quote_pdf(quote, line_items, customer, site, business_settings, out
     if not line_items:
         table_data.append(["No line items yet.", "", "", ""])
 
-    items_table = Table(table_data, colWidths=[102 * mm, 18 * mm, 30 * mm, 32 * mm], repeatRows=1)
-    items_table.setStyle(TableStyle([
+    def build_items_table(filler_rows):
+        data = table_data + [["", "", "", ""]] * filler_rows
+        table = Table(data, colWidths=[102 * mm, 18 * mm, 30 * mm, 32 * mm], repeatRows=1)
+        table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), INK_COLOR),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), BOLD_FONT),
@@ -270,9 +293,11 @@ def generate_quote_pdf(quote, line_items, customer, site, business_settings, out
         ("LINEBELOW", (0, 1), (-1, -1), 0.4, RULE_COLOR),
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    story.append(items_table)
-    story.append(Spacer(1, push_down_spacer_mm(len(line_items)) * mm))
+        ]))
+        return table
+
+    items_index = len(story)
+    story.append(build_items_table(0))
 
     # --- Totals, right-aligned, total row tinted ---
     totals_data = [["Subtotal", format_money(quote.subtotal_minor, quote.currency)]]
@@ -362,6 +387,11 @@ def generate_quote_pdf(quote, line_items, customer, site, business_settings, out
         box_style.append(("LINEBELOW", (0, banking_row_index), (-1, banking_row_index), 0.5, ACCENT_COLOR))
     terms_box.setStyle(TableStyle(box_style))
     tail.append(terms_box)
+    # Pad the items table with empty ruled rows so the totals + terms box
+    # sit at the bottom of page 1 - no blank gap (Minette, 2026-09-22).
+    story[items_index] = build_items_table(
+        _filler_row_count(story, tail, build_items_table, doc.width, doc.height)
+    )
     story.extend(tail)
 
     doc.build(story, onFirstPage=lambda c, d: draw_page_frame(c, d, business_settings), onLaterPages=lambda c, d: draw_page_frame(c, d, business_settings))

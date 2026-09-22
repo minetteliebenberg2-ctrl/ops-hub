@@ -80,7 +80,7 @@ class DashboardView(ctk.CTkFrame):
             text_color=COLORS["text_tertiary"],
             hover_color=COLORS["surface_secondary"],
             border_width=0,
-            command=lambda: self.winfo_toplevel().state("zoomed"),
+            command=lambda: __import__("gui.window_state", fromlist=["maximise"]).maximise(self.winfo_toplevel()),
         ).pack(side="left", padx=(8, 0), anchor="w")
 
         now = datetime.now()
@@ -284,8 +284,11 @@ class DashboardView(ctk.CTkFrame):
                 self._all_customers = self.crm_service.list_customers() or []
             except Exception:
                 self._all_customers = []
-            if self.winfo_exists():
-                self.after(0, self._update_az_strip)
+            try:
+                if self.winfo_exists():
+                    self.after(0, self._update_az_strip)
+            except RuntimeError:
+                pass
         threading.Thread(target=_load, daemon=True).start()
 
     def _update_az_strip(self):
@@ -400,8 +403,11 @@ class DashboardView(ctk.CTkFrame):
     # ==================================================
 
     def _on_kpis_loaded(self, data):
-        if self.winfo_exists():
-            self.after(0, lambda: self._update_kpis(data))
+        try:
+            if self.winfo_exists():
+                self.after(0, lambda: self._update_kpis(data))
+        except RuntimeError:
+            pass
 
     def _update_kpis(self, data):
         try:
@@ -425,8 +431,11 @@ class DashboardView(ctk.CTkFrame):
                     pass
 
     def _on_activities_loaded(self, activities):
-        if self.winfo_exists():
-            self.after(0, lambda: self._update_activities(activities))
+        try:
+            if self.winfo_exists():
+                self.after(0, lambda: self._update_activities(activities))
+        except RuntimeError:
+            pass
 
     def _update_activities(self, activities):
         try:
@@ -469,8 +478,11 @@ class DashboardView(ctk.CTkFrame):
                 ).pack(side="right")
 
     def _on_sidebar_loaded(self, data):
-        if self.winfo_exists():
-            self.after(0, lambda: self._update_sidebar(data))
+        try:
+            if self.winfo_exists():
+                self.after(0, lambda: self._update_sidebar(data))
+        except RuntimeError:
+            pass
 
     def _update_sidebar(self, data):
         try:

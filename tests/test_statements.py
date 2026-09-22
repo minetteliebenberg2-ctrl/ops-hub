@@ -52,10 +52,11 @@ def quote_service(test_db):
 
 
 @pytest.fixture
-def quote_document_service(test_db, quote_service):
+def quote_document_service(test_db, quote_service, crm_service):
     return QuoteDocumentService(
         repository=QuoteDocumentRepository(db=test_db),
         quote_service=quote_service,
+        crm_service=crm_service,
     )
 
 
@@ -102,7 +103,7 @@ def test_generate_statement_totals_invoices_in_period(crm_service, quote_service
     today = datetime.now().strftime("%Y-%m-%d")
     statement, invoices = statement_service.generate_statement(customer.id, today, today, "minette")
 
-    assert statement.document_number.startswith("STA_")
+    assert statement.document_number.startswith("KOM-STA_")
     assert statement.total_minor == invoice1.total_minor + invoice2.total_minor
     assert len(invoices) == 2
 
@@ -126,5 +127,5 @@ def test_statement_numbers_are_scoped_per_customer(crm_service, quote_service, q
     rebosis_statement, _ = statement_service.generate_statement(rebosis.id, today, today, "minette")
 
     yy = f"{datetime.now().year % 100:02d}"
-    assert komatsu_statement.document_number == f"STA_{yy}/001"
-    assert rebosis_statement.document_number == f"STA_{yy}/001"
+    assert komatsu_statement.document_number == f"KOM-STA_{yy}/001"
+    assert rebosis_statement.document_number == f"REB-STA_{yy}/001"
