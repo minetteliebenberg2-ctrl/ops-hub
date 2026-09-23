@@ -84,8 +84,16 @@ class DashboardView(ctk.CTkFrame):
         ).pack(side="left", padx=(8, 0), anchor="w")
 
         now = datetime.now()
+        date_text = now.strftime("%A %d %B %Y")
+        try:
+            from core.business_settings_service import BusinessSettingsService
+            trading_name = (BusinessSettingsService().get_settings().trading_name or "").strip()
+        except Exception:
+            trading_name = ""
+        if trading_name:
+            date_text += f" · {trading_name}"
         ctk.CTkLabel(
-            header, text=now.strftime("%A %d %B %Y · FacilitiesCo"),
+            header, text=date_text,
             font=FONTS["body_sm"], text_color=COLORS["text_tertiary"],
         ).pack(anchor="w", pady=(2, 0))
 
@@ -197,7 +205,6 @@ class DashboardView(ctk.CTkFrame):
             ("+ Add Contact", self._action_add_contact),
             ("Schedule Job", self._action_schedule_visit),
             ("Documents", self._action_documents),
-            ("Job KPIs", self._action_job_kpis),
         ]
 
         for label, callback in actions:
@@ -602,7 +609,7 @@ class DashboardView(ctk.CTkFrame):
 
     def _action_schedule_visit(self):
         if _main_window_ref:
-            _main_window_ref.open_module_by_id("site_visit")
+            _main_window_ref.open_module_by_id("calendar")
 
     def _action_documents(self):
         if _main_window_ref:
@@ -612,9 +619,6 @@ class DashboardView(ctk.CTkFrame):
         if _main_window_ref:
             _main_window_ref.open_module_by_id("accounting")
 
-    def _action_job_kpis(self):
-        from modules.dashboard.kpi_window import JobKPIWindow
-        JobKPIWindow(self.winfo_toplevel())
 
     def _action_add_contact(self):
         AddContactDialog(self.winfo_toplevel(), self.crm_service, self._all_customers)

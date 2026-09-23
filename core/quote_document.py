@@ -17,8 +17,34 @@ TAX_INVOICE = "Tax Invoice"
 # Split deposit / balance invoicing (invoice_part on quote_documents)
 DEPOSIT = "deposit"
 BALANCE = "balance"
-DEPOSIT_PERCENT = 65
-BALANCE_PERCENT = 35
+
+# The deposit split used to be a hardcoded 65/35 constant. It is now a
+# business setting (migration v0058) so it can be changed without a
+# code change. These helpers are the single read path - never import a
+# DEPOSIT_PERCENT constant again. The import is deferred to keep
+# core.quote_document free of a settings/database dependency at import
+# time, and every failure falls back to the old 65 so a missing or
+# unmigrated settings row can never break invoicing.
+DEFAULT_DEPOSIT_PERCENT = 65
+
+
+def deposit_percent(settings_service=None):
+    """The configured deposit %, 1-99, defaulting to 65."""
+
+    try:
+        if settings_service is None:
+            from core.business_settings_service import BusinessSettingsService
+            settings_service = BusinessSettingsService()
+        value = int(settings_service.get_settings().deposit_percent or DEFAULT_DEPOSIT_PERCENT)
+    except Exception:
+        return DEFAULT_DEPOSIT_PERCENT
+    return value if 1 <= value <= 99 else DEFAULT_DEPOSIT_PERCENT
+
+
+def balance_percent(settings_service=None):
+    """Always the remainder - deposit and balance sum to 100."""
+
+    return 100 - deposit_percent(settings_service)
 
 
 @dataclass

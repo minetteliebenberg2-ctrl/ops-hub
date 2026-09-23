@@ -84,3 +84,50 @@ def test_split_pdfs_render(tmp_path, crm_service, quote_service, quote_document_
         else:
             assert "Less deposit invoiced" in text and deposit.document_number in text
             assert "Balance due" in text
+
+
+# ----------------------------------------------------------
+# Deposit % is a business setting (migration v0058), not a constant.
+# ----------------------------------------------------------
+
+def set_deposit_percent(quote_document_service, percent):
+    settings = quote_document_service.business_settings.get_settings()
+    settings.trading_name = settings.trading_name or "Test Co"
+    settings.deposit_percent = percent
+    quote_document_service.business_settings.save_settings(settings, "minette")
+
+
+def test_deposit_percent_defaults_to_65(quote_document_service):
+    assert quote_document_service.deposit_percent() == 65
+
+
+def test_changing_the_setting_changes_the_split(crm_service, quote_service, quote_document_service):
+    set_deposit_percent(quote_document_service, 50)
+    quote = make_split_quote(quote_service, make_customer(crm_service).id)
+
+    deposit = quote_document_service.generate_deposit_invoice(quote.id, "minette")
+    balance = quote_document_service.generate_balance_invoice(quote.id, "minette")
+
+    assert quote_document_service.deposit_percent() == 50
+    assert deposit.total_minor == round(quote.total_minor * 0.50)
+    assert deposit.total_minor + balance.total_minor == quote.total_minor
+
+
+def test_deposit_percent_is_validated(quote_document_service):
+    service = quote_document_service.business_settings
+    for bad in (0, 100, -5, "abc"):
+        settings = service.get_settings()
+        settings.trading_name = "Test Co"
+        settings.deposit_percent = bad
+        with pytest.raises(ValueError):
+            service.save_settings(settings, "minette")
+
+
+def test_balance_is_always_the_remainder(crm_service, quote_service, quote_document_service):
+    set_deposit_percent(quote_document_service, 33)
+    quote = make_split_quote(quote_service, make_customer(crm_service).id, unit_price_minor=1000001)
+
+    deposit = quote_document_service.generate_deposit_invoice(quote.id, "minette")
+    balance = quote_document_service.generate_balance_invoice(quote.id, "minette")
+
+    assert deposit.total_minor + balance.total_minor == quote.total_minor

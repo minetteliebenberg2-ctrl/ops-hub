@@ -33,16 +33,10 @@ from core.document_pdf import (
     draw_page_frame,
 )
 from core.quote import format_quote_number
-from core.structure_catalog import CANTILEVER, SHADE_SAIL, STANDARD, STRUCTURE_TYPES
 
 
 LOGO_PATH = get_assets_dir() / "logo_placeholder.png"
 
-STRUCTURE_DISPLAY_NAMES = {
-    CANTILEVER: "Cantilever Shadeport",
-    STANDARD: "Four Post Shadeport",
-    SHADE_SAIL: "Shade Sail",
-}
 
 
 def format_money(minor_units, currency="ZAR"):
@@ -94,39 +88,11 @@ def resolved_or_tbc(value):
 
 
 def format_line_item_description(item):
+    """The line's own description; falls back to its item type name."""
 
-    if item.description.strip():
+    if (item.description or "").strip():
         return item.description.strip()
-
-    display_name = STRUCTURE_DISPLAY_NAMES.get(item.structure_type, item.structure_type or "Structure")
-
-    # Width/projection/height/car-bay detail only makes sense for actual
-    # structures. A configurable non-structural type (Maintenance, a
-    # one-off client request, ...) has no real height - showing the
-    # form's leftover default (e.g. "2.1m height") would be wrong, so
-    # those types fall through to the bare display_name and should use
-    # the Description field on the grid to say what they actually are.
-    if item.structure_type not in STRUCTURE_TYPES:
-        return display_name
-
-    if item.structure_type == SHADE_SAIL:
-        detail_parts = [item.shape] if item.shape else []
-        if item.width_m and item.projection_m:
-            detail_parts.append(f"{item.width_m:g}m × {item.projection_m:g}m")
-    else:
-        detail_parts = [f"{item.car_bays} Car Bay"] if item.car_bays else []
-        if item.width_m and item.projection_m:
-            detail_parts.append(f"{item.width_m:g}m × {item.projection_m:g}m")
-
-    if item.height_m:
-        detail_parts.append(f"{item.height_m:g}m height")
-
-    if item.colour:
-        detail_parts.append(item.colour)
-
-    if detail_parts:
-        return f"{display_name} ({', '.join(detail_parts)})"
-    return display_name
+    return (item.structure_type or "").strip() or "Item"
 
 
 def format_address_lines(address):
@@ -185,7 +151,7 @@ def generate_quote_pdf(quote, line_items, customer, site, business_settings, out
         logo._restrictSize(65 * mm, 16 * mm)
         logo_cell = logo
 
-    business_lines = [f"<b>{business_settings.trading_name}</b>", BUSINESS_LOCALITY]
+    business_lines = [f"<b>{business_settings.trading_name}</b>"] + ([BUSINESS_LOCALITY] if BUSINESS_LOCALITY else [])
     for value in (business_settings.email, business_settings.phone, business_settings.website):
         if value:
             business_lines.append(value)
@@ -364,8 +330,12 @@ def generate_quote_pdf(quote, line_items, customer, site, business_settings, out
             f"with a {quote.deposit_percentage:g}% deposit; the {quote.balance_percentage:g}% balance is "
             "payable on completion. Signing, confirming by email, or paying the deposit constitutes "
             "acceptance of this quotation and of our Terms &amp; Conditions, which together form the "
-            "entire agreement between the parties. Please send the signed quotation and proof of payment "
-            "to sales@facilitiesco.com."
+            "entire agreement between the parties. "
+            + (
+                f"Please send the signed quotation and proof of payment to {business_settings.email.strip()}."
+                if (business_settings.email or "").strip()
+                else "Please send us the signed quotation and proof of payment."
+            )
         )
     fine_lines.append(
         "<b>Scope &amp; Pricing.</b> Work is carried out strictly per this quotation. Variations and "

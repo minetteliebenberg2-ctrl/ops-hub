@@ -56,8 +56,6 @@ class DuplicateEmailEngine:
     def __init__(self):
 
         self.protected_accounts = {
-            "minette@facilitiesco.com",
-            "sales@facilitiesco.com",
         }
 
         self.mail_scanner = MailScanner()

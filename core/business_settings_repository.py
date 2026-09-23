@@ -48,10 +48,10 @@ class BusinessSettingsRepository:
                     id, trading_name, legal_name, registration_number,
                     vat_registered, vat_number, email, phone, website,
                     bank_name, bank_account_name, bank_account_number,
-                    branch_code, swift_code, notes, created_at, updated_at,
-                    updated_by
+                    branch_code, swift_code, deposit_percent, notes,
+                    created_at, updated_at, updated_by
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     trading_name = excluded.trading_name,
                     legal_name = excluded.legal_name,
@@ -66,6 +66,7 @@ class BusinessSettingsRepository:
                     bank_account_number = excluded.bank_account_number,
                     branch_code = excluded.branch_code,
                     swift_code = excluded.swift_code,
+                    deposit_percent = excluded.deposit_percent,
                     notes = excluded.notes,
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by
@@ -85,6 +86,7 @@ class BusinessSettingsRepository:
                     settings.bank_account_number,
                     settings.branch_code,
                     settings.swift_code,
+                    int(settings.deposit_percent or 65),
                     settings.notes,
                     settings.created_at,
                     settings.updated_at,
@@ -113,6 +115,7 @@ class BusinessSettingsRepository:
             bank_account_number=row["bank_account_number"],
             branch_code=row["branch_code"],
             swift_code=row["swift_code"],
+            deposit_percent=int(row["deposit_percent"] or 65) if "deposit_percent" in row.keys() else 65,
             notes=row["notes"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],

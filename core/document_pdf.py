@@ -25,7 +25,7 @@ from core.app_paths import get_assets_dir
 # Lato (SIL Open Font License), chosen 2026-08-03 to replace ReportLab's
 # built-in Helvetica default. Humanist sans - warmer than Helvetica, slightly
 # narrower so long line-item descriptions wrap less, and it complements the
-# geometric FacilitiesCo wordmark. Falls back to Helvetica if the TTFs are
+# geometric wordmark. Falls back to Helvetica if the TTFs are
 # missing so a document never fails to generate over a font.
 FONT_DIR = get_assets_dir() / "fonts"
 
@@ -76,27 +76,25 @@ INK_COLOR = colors.HexColor("#3A3A3A")  # dark grey, not pure black, per Minette
 GREY_COLOR = colors.HexColor("#6B7280")
 RULE_COLOR = colors.HexColor("#E4E7EB")
 
-TAGLINE = "DESIGN  |  CREATE  |  INNOVATE  |  MAINTAIN"
+TAGLINE = ""
 
-# Deliberately city-level only. The registered address (11 Francis Road) is
-# Minette's home address - she asked on 2026-08-03 that it never appear on any
-# client-facing document. Do not add a street line here or pull one in from
-# an address record.
-BUSINESS_LOCALITY = "Germiston, South Africa, 1401"
-PROOF_OF_PAYMENT_NOTE = "Please send proof of payment to sales@facilitiesco.com."
+# Locality line under the business name in document headers. Left blank in
+# the generic app - the business name/contact details come from Settings.
+BUSINESS_LOCALITY = ""
+PROOF_OF_PAYMENT_NOTE = "Please send proof of payment to our accounts email."
 
-SOCIAL_HANDLE = "@FacilitiesCo"
 
-# Built from the confirmed handle pattern (same handle on every platform).
-# Not independently verified against Minette's actual profile URLs - if
-# any of these don't resolve, tell me the real one and I'll fix it here
-# once for every document type.
-SOCIAL_LINKS = (
-    ("IG", "https://instagram.com/FacilitiesCo"),
-    ("FB", "https://facebook.com/FacilitiesCo"),
-    ("YT", "https://youtube.com/@FacilitiesCo"),
-    ("in", "https://linkedin.com/company/FacilitiesCo"),
-)
+def proof_of_payment_note(business_settings=None):
+    email = (getattr(business_settings, "email", "") or "").strip()
+    if email:
+        return f"Please send proof of payment to {email}."
+    return PROOF_OF_PAYMENT_NOTE
+
+
+SOCIAL_HANDLE = ""
+
+# No social links in the generic app.
+SOCIAL_LINKS = ()
 
 PAGE_MARGIN = 14 * mm
 FOOTER_HEIGHT = 24 * mm
@@ -120,9 +118,10 @@ def draw_page_frame(canvas, doc, business_settings):
     canvas.setLineWidth(0.6)
     canvas.line(PAGE_MARGIN, FOOTER_HEIGHT, page_width - PAGE_MARGIN, FOOTER_HEIGHT)
 
-    canvas.setFont(BOLD_FONT, 8)
-    canvas.setFillColor(INK_COLOR)
-    canvas.drawString(PAGE_MARGIN, FOOTER_HEIGHT - 10, TAGLINE)
+    if TAGLINE:
+        canvas.setFont(BOLD_FONT, 8)
+        canvas.setFillColor(INK_COLOR)
+        canvas.drawString(PAGE_MARGIN, FOOTER_HEIGHT - 10, TAGLINE)
 
     canvas.setFont(BODY_FONT, 7.5)
     canvas.setFillColor(GREY_COLOR)

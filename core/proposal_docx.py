@@ -2,10 +2,8 @@
 # FC Hub - Proposal DOCX Generator
 # ----------------------------------------------------------
 # Purpose:
-# Fill the FacilitiesCo_Proposal_Template_A4 layout with real
-# client/site data from a ProposalData object. Mirrors the static
-# layout built by modules/proposals/templates/build_proposal_template.py,
-# but every "[ FILL IN ]" style field becomes data-driven, falling back
+# Fill a generic proposal layout with real client/site data from a
+# ProposalData object. Every "[ FILL IN ]" style field becomes data-driven, falling back
 # to the same placeholder text when a field is left blank.
 # ==========================================================
 
@@ -34,26 +32,34 @@ ASSETS_DIR = get_assets_dir()
 LOGO_PATH = ASSETS_DIR / "logo_placeholder.png"
 ICON_DIR = ASSETS_DIR / "social_icons"
 
-CLIENT_LOGOS = {
-    "Komatsu": r"C:\users\minet\OneDrive\Documents\FacilitiesCo\FacilitiesCo Pty\FC Clients\Komatsu\Komatsu Logo.png",
-    "Blend Property Group": r"C:\users\minet\OneDrive\Documents\FacilitiesCo\FacilitiesCo Pty\FC Clients\Blend Property Group\Blend Property Logo.png",
-    "Astron": r"C:\users\minet\OneDrive\Documents\FacilitiesCo\FacilitiesCo Pty\FC Clients\Astron\astron Logo.jpg",
-    "Benjamin Prep": r"C:\users\minet\OneDrive\Documents\FacilitiesCo\FacilitiesCo Pty\FC Clients\School\Benjamin Prep Logo-05.png",
-}
-CLIENTS_NO_LOGO = [
-    "Digistics", "BDO", "DSV", "CoSpace", "Rebosis Property Fund",
-    "Ascension Properties", "Saint Gobain", "Tarloy Properties",
-    "Insimbi Alloy", "The Cavaleros Property Group", "Little Porcupine Schools",
-]
-
 TIMELINE_PHASES = [
-    ("1. Site Inspection", "Measurements taken, structures assessed"),
+    ("1. Initial Assessment", "Requirements confirmed with the client"),
     ("2. Quotation", "Formal quote issued for sign-off"),
     ("3. Order Confirmation", "Signed quotation + deposit received"),
-    ("4. Fabrication", "Steelwork and netting prepared to spec"),
-    ("5. Installation", "On-site installation and tensioning"),
-    ("6. Final Inspection", "Sign-off with site contact"),
+    ("4. Preparation", "Materials and resources prepared"),
+    ("5. Delivery", "Work carried out as quoted"),
+    ("6. Final Sign-off", "Sign-off with the client contact"),
 ]
+
+
+def _business_settings():
+    try:
+        from core.business_settings_service import BusinessSettingsService
+        return BusinessSettingsService().get_settings()
+    except Exception:
+        return None
+
+
+def _contact_lines(settings):
+    """Business name + contact lines from Settings (no hardcoded identity)."""
+    if settings is None:
+        return "", []
+    name = (settings.trading_name or settings.legal_name or "").strip()
+    contact = "  ·  ".join(v.strip() for v in (settings.email, settings.phone) if (v or "").strip())
+    lines = [contact] if contact else []
+    if (settings.website or "").strip():
+        lines.append(settings.website.strip())
+    return name, lines
 
 
 def _val(value, placeholder):
@@ -311,7 +317,7 @@ def add_logo(doc, path, width_cm, alignment=WD_ALIGN_PARAGRAPH.CENTER):
 
 
 def generate_proposal_docx(data, output_path, include_terms=False, photo_rotations=None):
-    """Build a filled FacilitiesCo proposal document from a ProposalData
+    """Build a filled proposal document from a ProposalData
     object and save it to output_path."""
 
     doc = Document()
@@ -331,19 +337,17 @@ def generate_proposal_docx(data, output_path, include_terms=False, photo_rotatio
         rpr.append(rFonts)
     rFonts.set(qn('w:eastAsia'), FONT)
 
+    settings = _business_settings()
+    business_name, contact_lines = _contact_lines(settings)
+
     # ---------------- PAGE 1 - COVER ----------------
     doc.add_paragraph().paragraph_format.space_after = Pt(6)
-    add_logo(doc, str(LOGO_PATH), width_cm=9)
+    if LOGO_PATH.exists():
+        add_logo(doc, str(LOGO_PATH), width_cm=9)
 
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(14)
-    p.paragraph_format.space_after = Pt(40)
-    r = p.add_run("DESIGN  |  CREATE  |  INNOVATE  |  MAINTAIN")
-    set_font(r, size=9.5, color=GREY, bold=True)
-
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(40)
     p.paragraph_format.space_after = Pt(40)
     r = p.add_run("PROPOSAL")
     set_font(r, size=38, color=CHARCOAL, bold=True)
@@ -379,32 +383,25 @@ def generate_proposal_docx(data, output_path, include_terms=False, photo_rotatio
     spacer = doc.add_paragraph()
     spacer.paragraph_format.space_after = Pt(90)
 
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run("Prepared by Minette Liebenberg")
-    set_font(r, size=10.5, color=GREY)
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run("minette@facilitiesco.com  \u00b7  083 378 5122")
-    set_font(r, size=9.5, color=GREY)
+    if business_name:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = p.add_run(f"Prepared by {business_name}")
+        set_font(r, size=10.5, color=GREY)
+    for line in contact_lines:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = p.add_run(line)
+        set_font(r, size=9.5, color=GREY)
 
     page_break(doc)
 
     # ---------------- PAGE 2 - SCOPE OF WORK ----------------
     h1(doc, "Scope of Work")
-    body(
-        doc,
-        "Everything we do is considered, directed through strategy and concept \u2014 "
-        "structures, netting and cable specified to fit your site, not off-the-shelf.",
-        italic=True, color=GREY, space_after=16,
-    )
 
     h2(doc, "Site Details")
-    field_line(doc, "Site / Area", data.site_area, "[e.g. Directors Parking]")
-    field_line(doc, "Structure Colour", data.structure_colour, "[COLOUR]")
-    field_line(doc, "Netting Colour", data.netting_colour, "[COLOUR]")
-    field_line(doc, "Netting Size", data.netting_size, "[SINGLE / DOUBLE / TRIPLE]")
-    field_line(doc, "Dimensions", data.dimensions, "[WIDTH x LENGTH]")
+    field_line(doc, "Site / Area", data.site_area, "[SITE / AREA]")
+    field_line(doc, "Dimensions / Size", data.dimensions, "[DIMENSIONS]")
 
     h2(doc, "Project Timeline")
     durations = list(data.timeline_durations or [])
@@ -421,173 +418,24 @@ def generate_proposal_docx(data, output_path, include_terms=False, photo_rotatio
 
     doc.add_paragraph().paragraph_format.space_after = Pt(4)
     h2(doc, "What Is Expected From You")
-    bullet(doc, "A deposit of 65% is required on confirmation of order, 35% balance on completion")
-    bullet(doc, "Confirmation of order is a signed quotation and deposit sent to FacilitiesCo")
-    bullet(doc, "The price on the quotation is all-inclusive \u2014 VAT is not applicable")
-    bullet(doc, "Site access arranged for inspection, installation, and final sign-off")
+    bullet(doc, "A deposit is required on confirmation of order, with the balance payable on completion, as set out in the quotation")
+    bullet(doc, "Confirmation of order is a signed quotation and the deposit")
+    bullet(doc, "Access arranged for assessment, delivery, and final sign-off")
 
-    page_break(doc)
-
-    # ---------------- PAGE 3 - SITE INSPECTION ----------------
-    h1(doc, "Site Inspection")
-    body(doc, f"Area: {_val(data.site_area, '[SITE / AREA NAME]')}", bold=True, size=12, color=CHARCOAL, space_after=8)
-
-    photo_grid(doc, data.site_photos[:8], count=8, cols=4, rotations=photo_rotations)
-    doc.add_paragraph().paragraph_format.space_after = Pt(4)
-
-    h2(doc, "Net Replacement")
-    styled_table(
-        doc,
-        ["Description", "Quantity"],
-        [
-            ["Two Car Nets (Double)", _val(data.net_double_qty, "[ ]")],
-            ["Three Car Nets (Triple)", _val(data.net_triple_qty, "[ ]")],
-        ],
-        [11.0, 5.0],
-    )
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(4)
-    h2(doc, "Painting Requirements")
-    styled_table(
-        doc,
-        ["Painting Level", "Number of Structures"],
-        [
-            ["Light", _val(data.painting_light, "[ ]")],
-            ["Medium", _val(data.painting_medium, "[ ]")],
-            ["Full", _val(data.painting_full, "[ ]")],
-        ],
-        [11.0, 5.0],
-    )
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(4)
-    h2(doc, "Material Notes")
-    bullet(doc, "Netting Type: 80% UV Block \u2610   90% UV Block \u2610")
-    bullet(doc, f"Colour: {_val(data.netting_colour, '[COLOUR]')}  \u00b7  All nets secured with galvanised fixings")
-    bullet(doc, "Tensioned to fit per structure spec, using 5mm 6x19 fibre core galvanised cable")
-
-    if len(data.site_photos) > 8:
+    # ---------------- SITE PHOTOS ----------------
+    if data.site_photos:
         page_break(doc)
-        h1(doc, "Additional Site Photos")
-        photo_grid(doc, data.site_photos[8:16], count=8, cols=4, rotations=photo_rotations)
+        h1(doc, "Site Photos")
+        body(doc, f"Area: {_val(data.site_area, '[SITE / AREA NAME]')}", bold=True, size=12, color=CHARCOAL, space_after=8)
+        photo_grid(doc, data.site_photos[:8], count=8, cols=4, rotations=photo_rotations)
+        if len(data.site_photos) > 8:
+            page_break(doc)
+            h1(doc, "Additional Site Photos")
+            photo_grid(doc, data.site_photos[8:16], count=8, cols=4, rotations=photo_rotations)
 
     page_break(doc)
 
-    # ---------------- PAGE 4 - TECHNICAL SPECIFICATIONS (static) ----------------
-    h1(doc, "Technical Specifications")
-
-    h2(doc, "Structural Steel")
-    bullet(doc, "Cantilever \u2014 Anchor Poles: 152mm / 165mm round tubing (3mm wall thickness)")
-    bullet(doc, "Cantilever \u2014 Main Frame: 50mm / 57mm round tubing (2mm wall thickness)")
-    bullet(doc, "Four Post \u2014 Anchor Poles: 76mm / 101mm round tubing (3mm wall thickness)")
-    bullet(doc, "Four Post \u2014 Main Frame: 50mm round tubing (2mm wall thickness)")
-    bullet(doc, "Foundations: 600mm\u2013800mm deep pole planting, secured with ready-mix concrete")
-    bullet(doc, "Designed for high wind conditions (120\u2013140 km/h when correctly installed)")
-
-    h2(doc, "Shade Netting")
-    bullet(doc, "Knittex Z25 UV-stabilised shade netting")
-    bullet(doc, "High durability and tear resistance, wide range of colours available")
-
-    h2(doc, "Cable Tensioning System (Certified)")
-    bullet(doc, "5mm 6x19 Fibre Core Galvanised Steel Cable, secured with Crosby clamps")
-    bullet(doc, "Breaking Load: 13.6 kN (\u2248 1,385 kg)  \u00b7  Tested Breaking Load: 14.3 kN")
-
-    h2(doc, "Stitching & Thread \u2014 Coats Dabond AWF")
-    bullet(doc, "Bonded, twisted continuous filament polyester thread with a PFC-free anti-wick finish")
-    bullet(doc, "Blocks water migrating through stitched seams for genuinely water-repellent stitching")
-    bullet(doc, "Excellent bleach, mildew and rot resistance for long-term outdoor exposure")
-    bullet(doc, "Tex 80 (5,700 cN) for standard seams, Tex 135 (9,310 cN) for heavy-duty seams")
-
-    page_break(doc)
-
-    # ---------------- PAGE 5 - WHY INVEST (static) ----------------
-    h1(doc, "Why Invest in Shade Structures")
-    pairs = [
-        ("Protection", "Protect yourself and valuable assets from UV sun rays and hail."),
-        ("Warranty", "8-year manufacturer's warranty on shade netting, guaranteed against defective materials and workmanship."),
-        ("Flexible Design", "Structures can be adjoined, back-to-back, side-by-side, or built to custom shapes and sizes."),
-        ("Wide Application", "Residential parking bays, outdoor entertaining areas, playgrounds, nurseries and gardening venues."),
-        ("Sustainability", "Re-netting and repairs to existing structures and netting extend service life without a full rebuild."),
-        ("Structure Choice", "Four options to suit the site: Standard Four-Post, Semi-Cantilevered, Full Cantilevered, or Shade Sails."),
-        ("Build Quality", "All-steel construction on the framework, with netting made to measure for each individual structure."),
-        ("After-Sales", "Complete after-sales service and support for the life of the structure."),
-    ]
-    for title, desc in pairs:
-        p = doc.add_paragraph()
-        p.paragraph_format.space_after = Pt(1)
-        r = p.add_run(title)
-        set_font(r, size=11, color=GREEN, bold=True)
-        body(doc, desc, space_after=10)
-
-    page_break(doc)
-
-    # ---------------- PAGE 6 - TYPES OF STRUCTURES (static) ----------------
-    h1(doc, "Types of Structures")
-
-    h2(doc, "Four Post / Standard")
-    body(
-        doc,
-        "Four steel posts anchor the structure, one on each corner. Four hoops complete the "
-        "structural element, rolled to create a dome effect. Suits any parking or outdoor "
-        "area needing shade \u2014 over playgrounds, pools, grandstands, picnic areas and campsites.",
-        space_after=8,
-    )
-    styled_table(doc, ["Size", "Dimensions"], [["Single", "3m x 5m"], ["Double", "5m x 5m"], ["Triple", "7.5m x 5m"]], [11.0, 5.0])
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(6)
-    h2(doc, "Cantilever")
-    body(
-        doc,
-        "The structure extends from a wall or post, to which it must be firmly attached \u2014 "
-        "substantial engineering and proper load calculations for a genuinely dramatic effect. "
-        "Two upright columns at the back allow total access when turning into the bay.",
-        space_after=8,
-    )
-    styled_table(doc, ["Size", "Dimensions"], [["Single", "3m x 5m"], ["Double", "5m x 5m"], ["Triple", "7.5m x 5m"]], [11.0, 5.0])
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(6)
-    h2(doc, "Shade Sail")
-    body(
-        doc,
-        "Tensioned fabric stretched between fixing points \u2014 wall brackets, poles, or a "
-        "combination of both. A flexible option for irregular areas where a post-and-hoop "
-        "structure isn't practical.",
-        space_after=8,
-    )
-
-    page_break(doc)
-
-    # ---------------- PAGE 7 - CLIENTS (static logo grid) ----------------
-    h1(doc, "Our Clients")
-    body(doc, "A few of the businesses we've worked with:", space_after=14)
-
-    all_client_cells = list(CLIENT_LOGOS.items()) + [(name, None) for name in CLIENTS_NO_LOGO]
-    cols = 3
-    rows_needed = (len(all_client_cells) + cols - 1) // cols
-    ctable = doc.add_table(rows=rows_needed, cols=cols)
-    ctable.alignment = WD_TABLE_ALIGNMENT.CENTER
-    idx = 0
-    for r in range(rows_needed):
-        set_row_height(ctable.rows[r], 2.6)
-        for c in range(cols):
-            cell = ctable.rows[r].cells[c]
-            cell.width = Cm(5.6)
-            cell_border(cell, style="single", color="E5E5E5", size=4)
-            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-            if idx < len(all_client_cells):
-                name, logo_path2 = all_client_cells[idx]
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                if logo_path2 and os.path.exists(logo_path2):
-                    run = p.add_run()
-                    run.add_picture(logo_path2, width=Cm(3.6))
-                else:
-                    r1 = p.add_run(name)
-                    set_font(r1, size=9.5, color=GREY, italic=True)
-            idx += 1
-
-    page_break(doc)
-
-    # ---------------- PAGE 8 - THANK YOU / CONTACT (static) ----------------
+    # ---------------- CLOSING / CONTACT ----------------
     for _ in range(4):
         doc.add_paragraph()
 
@@ -599,51 +447,16 @@ def generate_proposal_docx(data, output_path, include_terms=False, photo_rotatio
     for _ in range(3):
         doc.add_paragraph()
 
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run("Minette Liebenberg")
-    set_font(r, size=12.5, color=CHARCOAL, bold=True)
-
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run("Director, Shade Solutions by FacilitiesCo")
-    set_font(r, size=10, color=GREY)
-
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run("minette@facilitiesco.com  \u00b7  083 378 5122")
-    set_font(r, size=10, color=GREY)
-
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run("sales@facilitiesco.com  \u00b7  010 015 0532")
-    set_font(r, size=10, color=GREY)
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(10)
-
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    for icon_name in ["instagram", "facebook", "youtube", "linkedin"]:
-        run = p.add_run()
-        icon_path = ICON_DIR / f"icon_{icon_name}.png"
-        if icon_path.exists():
-            run.add_picture(str(icon_path), width=Cm(0.9))
-        p.add_run("   ")
-
-    doc.add_paragraph().paragraph_format.space_after = Pt(8)
-
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    icons = [
-        ("\U0001F310", "www.facilitiesco.com"),
-        ("", "@facilitiesco"),
-    ]
-    for i, (icon, label) in enumerate(icons):
-        r1 = p.add_run(f"{icon} {label}".strip())
-        set_font(r1, size=9, color=GREY)
-        if i < len(icons) - 1:
-            r2 = p.add_run("    \u00b7    ")
-            set_font(r2, size=9, color=LIGHTGREY)
+    if business_name:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = p.add_run(business_name)
+        set_font(r, size=12.5, color=CHARCOAL, bold=True)
+    for line in contact_lines:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = p.add_run(line)
+        set_font(r, size=10, color=GREY)
 
     doc.save(output_path)
     return output_path

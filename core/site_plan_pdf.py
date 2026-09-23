@@ -142,7 +142,7 @@ def generate_site_plan_pdf(plan, items, customer, site, business_settings, outpu
         logo._restrictSize(60 * mm, 15 * mm)
         logo_cell = logo
 
-    business_lines = [f"<b>{business_settings.trading_name}</b>", BUSINESS_LOCALITY]
+    business_lines = [f"<b>{business_settings.trading_name}</b>"] + ([BUSINESS_LOCALITY] if BUSINESS_LOCALITY else [])
     for value in (business_settings.email, business_settings.phone, business_settings.website):
         if value:
             business_lines.append(value)

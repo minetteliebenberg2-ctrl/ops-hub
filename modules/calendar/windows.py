@@ -316,7 +316,7 @@ class NewScheduledJobDialog(ctk.CTkToplevel):
         self.customer_menu.pack(padx=40, pady=(2, 10))
 
         self._build("Title", "title")
-        self.title_entry = ctk.CTkEntry(self, width=380, placeholder_text="e.g. Install 4-Post Cantilever")
+        self.title_entry = ctk.CTkEntry(self, width=380, placeholder_text="e.g. Site installation")
         self.title_entry.pack(padx=40, pady=(2, 10))
 
         self._build("Start Date", "start")

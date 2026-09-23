@@ -802,7 +802,13 @@ class SiteRepository:
                 (
                     site.id,
                     site.customer_id,
-                    site.address_id,
+                    # customer_sites.address_id is a nullable foreign
+                    # key onto customer_addresses. The Site dataclass
+                    # defaults it to "", which is not NULL to SQLite
+                    # and is not a real address row either, so saving a
+                    # site that has no address raised "FOREIGN KEY
+                    # constraint failed". Store the absence as NULL.
+                    site.address_id or None,
                     site.name,
                     site.site_type,
                     site.notes,

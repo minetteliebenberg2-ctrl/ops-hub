@@ -240,7 +240,7 @@ class DatabaseHealthCheck(Check):
     }
 
     def __init__(self, path=None):
-        self.path = Path(path) if path else PROJECT_ROOT / "database" / "fc_hub.db"
+        self.path = Path(path) if path else PROJECT_ROOT / "database" / "app.db"
 
     def run(self):
         if not self.path.exists():
@@ -318,7 +318,7 @@ class ResourceAndPathCheck(Check):
     name = "Paths and resources"
 
     def run(self):
-        database = PROJECT_ROOT / "database" / "fc_hub.db"
+        database = PROJECT_ROOT / "database" / "app.db"
         issues = []
         if not PROJECT_ROOT.is_absolute():
             issues.append("Project root is not absolute.")

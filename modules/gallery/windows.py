@@ -563,7 +563,7 @@ class BulkTagDialog(ctk.CTkToplevel):
             self, text="Tags (comma-separated)", font=("Segoe UI", 10),
             text_color=THEME_TEXT_SECONDARY, anchor="w",
         ).pack(fill="x", padx=20)
-        self.tags_entry = ctk.CTkEntry(self, width=380, placeholder_text="e.g. roof, before, cantilever")
+        self.tags_entry = ctk.CTkEntry(self, width=380, placeholder_text="e.g. roof, before, after")
         self.tags_entry.pack(padx=20, pady=(2, 16))
 
         button_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -626,7 +626,7 @@ class EditPhotoDialog(ctk.CTkToplevel):
         self.album_entry.pack(padx=20, pady=(2, 12))
 
         ctk.CTkLabel(self, text="Tags (comma-separated)", font=("Segoe UI", 10), text_color=THEME_TEXT_SECONDARY, anchor="w").pack(fill="x", padx=20)
-        self.tags_entry = ctk.CTkEntry(self, width=380, placeholder_text="e.g. roof, before, cantilever")
+        self.tags_entry = ctk.CTkEntry(self, width=380, placeholder_text="e.g. roof, before, after")
         self.tags_entry.insert(0, image.tags)
         self.tags_entry.pack(padx=20, pady=(2, 16))
 

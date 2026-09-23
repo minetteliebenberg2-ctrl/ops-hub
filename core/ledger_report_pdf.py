@@ -54,7 +54,7 @@ def generate_income_statement_pdf(summary, business_settings, date_from, date_to
     )
 
     story = []
-    business_name = getattr(business_settings, "trading_name", "") or "FacilitiesCo"
+    business_name = getattr(business_settings, "trading_name", "") or "Business"
     story.append(Paragraph(business_name, title_style))
     story.append(Paragraph("Income Statement", subtitle_style))
     date_range = f"{date_from or '(beginning)'} to {date_to or '(today)'}"

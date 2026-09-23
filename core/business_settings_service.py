@@ -55,7 +55,35 @@ class BusinessSettingsService:
         if not settings.trading_name:
             raise ValueError("Trading name is required.")
 
+        # Deposit % drives the split deposit/balance invoice pair.
+        # Balance is always 100 - deposit, so 0 and 100 are meaningless
+        # (they would make one of the two invoices zero-value).
+        try:
+            deposit = int(str(settings.deposit_percent).strip() or 65)
+        except (TypeError, ValueError):
+            raise ValueError("Deposit % must be a whole number between 1 and 99.")
+        if not 1 <= deposit <= 99:
+            raise ValueError("Deposit % must be a whole number between 1 and 99.")
+        settings.deposit_percent = deposit
+
         return self.settings_repository.save(settings)
+
+    # --------------------------------------------------
+
+    def deposit_percent(self):
+        """The configured deposit %, falling back to 65 if unset."""
+
+        try:
+            value = int(self.get_settings().deposit_percent or 65)
+        except (TypeError, ValueError):
+            return 65
+        return value if 1 <= value <= 99 else 65
+
+    # --------------------------------------------------
+
+    def balance_percent(self):
+
+        return 100 - self.deposit_percent()
 
     # --------------------------------------------------
 

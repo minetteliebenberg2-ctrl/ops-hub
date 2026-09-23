@@ -275,17 +275,6 @@ class ReplacementVsNewInstallTests(unittest.TestCase):
         for size, flat in CABLE_REPLACEMENT_FLAT.items():
             self.assertEqual(cable_and_clamps_cost(size, _prices(), replacement=True)["cable"], flat)
 
-    def test_replacement_flat_rates_match_the_existing_netting_quotes_tool(self):
-        """These figures were confirmed 2026-08-03 and already live in
-        modules/proposals/netting_quotes.py - the two must not drift."""
-
-        from core.structure_quote import CABLE_REPLACEMENT_FLAT
-        from modules.proposals.netting_quotes import CABLE_COST_PER_NET, NetType
-
-        self.assertEqual(CABLE_REPLACEMENT_FLAT["Single"], CABLE_COST_PER_NET[NetType.SINGLE])
-        self.assertEqual(CABLE_REPLACEMENT_FLAT["Double"], CABLE_COST_PER_NET[NetType.DOUBLE])
-        self.assertEqual(CABLE_REPLACEMENT_FLAT["Triple"], CABLE_COST_PER_NET[NetType.TRIPLE])
-
     def test_net_replacement_never_recharges_for_the_structure(self):
         replacement = quote_structure(
             CANTILEVER, "Triple", "Plusnet", _prices(),

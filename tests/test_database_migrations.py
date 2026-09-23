@@ -123,6 +123,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     (55, "job_cost_allocations"),
                     (56, "document_category_picklist"),
                     (57, "split_invoice"),
+                    (58, "deposit_percent_setting"),
                 ],
             )
             self.assertEqual(user_version, MigrationRunner(database).latest_version)
@@ -445,6 +446,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     "job_cost_allocations",
                     "document_category_picklist",
                     "split_invoice",
+                    "deposit_percent_setting",
                 ],
             )
 

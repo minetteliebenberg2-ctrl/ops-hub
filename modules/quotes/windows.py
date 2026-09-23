@@ -19,26 +19,16 @@ import customtkinter as ctk
 from gui.components.date_picker import DateEntry
 
 from core.address import Address
-from core.quote_document import BALANCE_PERCENT, DEPOSIT_PERCENT
+from core.quote_document import balance_percent, deposit_percent
 from core.business_document_pdf import generate_invoice_pdf, generate_proforma_pdf, generate_statement_pdf
 from core.business_settings_service import BusinessSettingsService
 from core.crm_service import CRMService
 from core.picklist_service import LINE_ITEM_TYPE, PicklistService
-from modules.proposals.netting_quotes import PAINT_COLORS, SUPPLIER_PRICES, Supplier
 from core.quote import format_quote_number
 from core.quote_document_service import QuoteDocumentService
 from core.quote_pdf import format_money, generate_quote_pdf
 from core.quote_service import QuoteService
 from core.statement_service import StatementService
-from core.structure_catalog import (
-    CANTILEVER,
-    DEFAULT_HEIGHT_M,
-    STANDARD,
-    STRUCTURE_TYPES,
-    car_bay_size,
-    size_label_for,
-    size_options_for,
-)
 from gui.entity_table import build_entity_table
 from gui.flow_layout import reflow_widgets
 from gui.document_saving import file_document_for_customer
@@ -55,7 +45,7 @@ def current_actor():
 
 STATUS_COLUMNS = ("Quote #", "Customer", "Site", "Status", "Total", "Issue Date", "Expiry Date")
 
-COLOUR_OPTIONS = sorted(set(SUPPLIER_PRICES[Supplier.KNITTEX_Z25]["colors"].keys()) | set(PAINT_COLORS))
+COLOUR_OPTIONS = []
 
 
 class QuotesWindow(ctk.CTkFrame):
@@ -337,17 +327,18 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         invoice_slot = ctk.CTkFrame(doc_row, fg_color="transparent")
         invoice_slot.pack(side="left")
         self._tax_invoice_btn = ctk.CTkButton(invoice_slot, text="Tax Invoice", command=self.generate_tax_invoice, width=110)
+        # Split % comes from Business Settings (v0058), so the labels
+        # are read at build time rather than baked in as a constant.
+        deposit_pct = deposit_percent()
         self._deposit_invoice_btn = ctk.CTkButton(
-            invoice_slot, text=f"Deposit Invoice ({DEPOSIT_PERCENT}%)", command=self.generate_deposit_invoice, width=160,
+            invoice_slot, text=f"Deposit Invoice ({deposit_pct}%)", command=self.generate_deposit_invoice, width=160,
         )
         self._balance_invoice_btn = ctk.CTkButton(
-            invoice_slot, text=f"Balance Invoice ({BALANCE_PERCENT}%)", command=self.generate_balance_invoice, width=160,
+            invoice_slot, text=f"Balance Invoice ({balance_percent()}%)", command=self.generate_balance_invoice, width=160,
         )
         self._tax_invoice_btn.pack(side="left", padx=4)
         ctk.CTkButton(doc_row, text="Statement", command=self.open_statement, width=110).pack(side="left", padx=4)
 
-        self._site_plan_btn = ctk.CTkButton(doc_row, text="Open Site Plan", command=self._open_site_plan, width=130)
-        self._job_card_btn = ctk.CTkButton(doc_row, text="Open Job Card", command=self._open_job_card, width=130)
 
         self._split_invoice_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
@@ -361,10 +352,6 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         grid_header.pack(fill="x", padx=20, pady=(0, 0))
         self.add_row_button = ctk.CTkButton(grid_header, text="+ Add Row", command=self.new_line_item, width=100)
         self.add_row_button.pack(side="left")
-        self.price_button = ctk.CTkButton(
-            grid_header, text="Calculate Prices", command=self.calculate_prices, width=140,
-        )
-        self.price_button.pack(side="left", padx=8)
         self.locked_label = ctk.CTkLabel(
             grid_header,
             text="This quote is Issued — line items are locked. Use Create Revision to make changes.",
@@ -388,8 +375,8 @@ class QuoteDetailWindow(ctk.CTkToplevel):
     # Spreadsheet-style line item grid
     # --------------------------------------------------
 
-    GRID_COLUMNS = ("Structure", "Car Bays", "Tier", "Width (m)", "Proj. (m)", "Colour", "Qty", "Unit Price (R)", "Description (optional)", "Amount", "")
-    GRID_COLUMN_WEIGHTS = (2, 2, 1, 1, 1, 1, 1, 1, 2, 1, 0)
+    GRID_COLUMNS = ("Item Type", "Tier", "Width (m)", "Length (m)", "Colour", "Qty", "Unit Price (R)", "Description (optional)", "Amount", "")
+    GRID_COLUMN_WEIGHTS = (2, 1, 1, 1, 1, 1, 1, 2, 1, 0)
 
     def _build_grid_header(self):
         for col, label in enumerate(self.GRID_COLUMNS):
@@ -452,64 +439,15 @@ class QuoteDetailWindow(ctk.CTkToplevel):
             f"Total: {format_money(quote.total_minor, quote.currency)}"
         )
 
-        self._update_job_card_buttons(quote)
-
         if self.on_change:
             self.on_change()
-
-    def _update_job_card_buttons(self, quote):
-        self._site_plan_btn.pack_forget()
-        self._job_card_btn.pack_forget()
-        if quote.site_id:
-            self._site_plan_btn.pack(side="left", padx=(12, 4))
-        if quote.status == "Accepted":
-            jc = self._find_job_card_for_quote(quote)
-            if jc:
-                self._job_card_btn.pack(side="left", padx=4)
-
-    def _find_job_card_for_quote(self, quote):
-        from core.job_card_service import JobCardService
-        try:
-            svc = JobCardService()
-            for jc in svc.list_job_cards_for_customer(quote.customer_id):
-                if quote.quote_number and quote.quote_number in (jc.notes or ""):
-                    return jc
-        except Exception:
-            pass
-        return None
-
-    def _open_job_card(self):
-        quote = self._quote
-        jc = self._find_job_card_for_quote(quote)
-        if not jc:
-            from tkinter import messagebox as mb
-            mb.showinfo("No Job Card", "No job card found for this quote.", parent=self)
-            return
-        customer = self.crm_service.get_customer(quote.customer_id)
-        if not customer:
-            return
-        from modules.site_visit.windows import JobCardWindow
-        JobCardWindow(self.winfo_toplevel(), customer, jc, on_change=self.refresh)
-
-    def _open_site_plan(self):
-        quote = self._quote
-        if not quote.site_id:
-            from tkinter import messagebox as mb
-            mb.showinfo("No Site", "Assign a site to this quote first.", parent=self)
-            return
-        customer = self.crm_service.get_customer(quote.customer_id)
-        site = self.crm_service.sites.get(quote.site_id)
-        if not customer or not site:
-            return
-        from modules.site_visit.windows import SitePlanWindow
-        SitePlanWindow(self.winfo_toplevel(), customer, site)
 
     def _build_grid_row(self, row_index, item):
 
         widgets = {}
         state = "normal" if self._editable else "disabled"
 
-        type_options = self.picklists.list_values(LINE_ITEM_TYPE) or list(STRUCTURE_TYPES)
+        type_options = self.picklists.list_values(LINE_ITEM_TYPE) or ["Item"]
         if item.structure_type and item.structure_type not in type_options:
             type_options = type_options + [item.structure_type]
 
@@ -523,27 +461,12 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         structure_menu.grid(row=row_index, column=0, sticky="ew", padx=3, pady=2)
         widgets["structure_type"] = structure_menu
 
-        # Car Bay's options/labels depend on the structure type - real
-        # car-bay dimensions for Cantilever/Standard, Single/Double/
-        # Triple for Cable, just "N/A" for anything else. Kept in sync
-        # live via _on_structure_type_change below.
-        car_bay_labels, _by_label = size_options_for(initial_structure_type)
-        current_car_label = size_label_for(initial_structure_type, item.car_bays)
-
-        car_bay_var = ctk.StringVar(value=current_car_label)
-        car_bay_menu = ctk.CTkOptionMenu(
-            self.grid_scroll, variable=car_bay_var, values=car_bay_labels,
-            command=lambda _v, iid=item.id: self._commit_row(iid), state=state,
-        )
-        car_bay_menu.grid(row=row_index, column=1, sticky="ew", padx=3, pady=2)
-        widgets["car_bay_label"] = car_bay_menu
-
         tier_var = ctk.StringVar(value=self._row_tiers.get(item.id, "Standard"))
         tier_menu = ctk.CTkOptionMenu(
             self.grid_scroll, variable=tier_var, values=["Standard", "High"],
             command=lambda _v, iid=item.id: self._on_tier_change(iid), state=state,
         )
-        tier_menu.grid(row=row_index, column=2, sticky="ew", padx=3, pady=2)
+        tier_menu.grid(row=row_index, column=1, sticky="ew", padx=3, pady=2)
         widgets["tier"] = tier_menu
 
         def make_entry(col, key, initial):
@@ -556,30 +479,30 @@ class QuoteDetailWindow(ctk.CTkToplevel):
             widgets[key] = entry
             return entry
 
-        make_entry(3, "width_m", "" if item.width_m is None else f"{item.width_m:g}")
-        make_entry(4, "projection_m", "" if item.projection_m is None else f"{item.projection_m:g}")
+        make_entry(2, "width_m", "" if item.width_m is None else f"{item.width_m:g}")
+        make_entry(3, "projection_m", "" if item.projection_m is None else f"{item.projection_m:g}")
 
         colour_combo = ctk.CTkComboBox(self.grid_scroll, values=["N/A"] + COLOUR_OPTIONS, state=state)
         colour_combo.set(item.colour or "N/A")
-        colour_combo.grid(row=row_index, column=5, sticky="ew", padx=3, pady=2)
+        colour_combo.grid(row=row_index, column=4, sticky="ew", padx=3, pady=2)
         colour_combo.bind("<FocusOut>", lambda _e, iid=item.id: self._commit_row(iid))
         colour_combo.bind("<Return>", lambda _e, iid=item.id: self._commit_row(iid))
         colour_combo.configure(command=lambda _v, iid=item.id: self._commit_row(iid))
         widgets["colour"] = colour_combo
 
-        make_entry(6, "quantity", f"{item.quantity:g}")
-        make_entry(7, "unit_price", f"{item.unit_price_minor / 100:.2f}")
-        make_entry(8, "description", item.description)
+        make_entry(5, "quantity", f"{item.quantity:g}")
+        make_entry(6, "unit_price", f"{item.unit_price_minor / 100:.2f}")
+        make_entry(7, "description", item.description)
 
         amount_label = ctk.CTkLabel(self.grid_scroll, text=format_money(item.amount_minor, self._quote.currency), anchor="e")
-        amount_label.grid(row=row_index, column=9, sticky="ew", padx=3, pady=2)
+        amount_label.grid(row=row_index, column=8, sticky="ew", padx=3, pady=2)
         widgets["amount"] = amount_label
 
         delete_button = ctk.CTkButton(
             self.grid_scroll, text="✕", width=28, fg_color="#8B2E2E", hover_color="#6E2222",
             command=lambda iid=item.id: self._delete_row(iid), state=state,
         )
-        delete_button.grid(row=row_index, column=10, sticky="ew", padx=3, pady=2)
+        delete_button.grid(row=row_index, column=9, sticky="ew", padx=3, pady=2)
         widgets["delete"] = delete_button
 
         self._row_widgets[item.id] = widgets
@@ -601,11 +524,7 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         """Selecting a flat-rate type (e.g. Refit Net) fills in a
         starting Unit Price from its picklist rate at the row's current
         Tier — but only when the field is still blank/zero, so it never
-        clobbers a price someone already typed. Also refreshes the Car
-        Bay dropdown's options for the newly-selected type (real car-bay
-        dimensions for Cantilever/Standard, Single/Double/Triple for
-        Cable, just N/A otherwise) - a size picked for the old type
-        rarely still makes sense for the new one, so it resets to N/A."""
+        clobbers a price someone already typed."""
 
         widgets = self._row_widgets.get(item_id)
         if widgets is not None:
@@ -614,10 +533,6 @@ class QuoteDetailWindow(ctk.CTkToplevel):
             if rate is not None and not current_price:
                 widgets["unit_price"].delete(0, "end")
                 widgets["unit_price"].insert(0, f"{rate / 100:.2f}")
-
-            new_labels, _by_label = size_options_for(widgets["structure_type"].get())
-            widgets["car_bay_label"].configure(values=new_labels)
-            widgets["car_bay_label"].set("N/A")
 
         self._commit_row(item_id)
 
@@ -654,29 +569,12 @@ class QuoteDetailWindow(ctk.CTkToplevel):
             return
 
         structure_type = widgets["structure_type"].get()
-        # Re-derived from the row's CURRENT structure_type, not a fixed
-        # universal label set - a size label only means something for
-        # types size_options_for() actually recognizes (Cantilever/
-        # Standard/Cable); anything else always resolves to None.
-        _size_options, size_by_label = size_options_for(structure_type)
-        car_bays = size_by_label.get(widgets["car_bay_label"].get())
         width_m = self._parse_float(widgets["width_m"].get())
         projection_m = self._parse_float(widgets["projection_m"].get())
 
-        if car_bays and structure_type in (CANTILEVER, STANDARD) and not (width_m and projection_m):
-            width_m, projection_m = car_bay_size(car_bays)
-
         item.structure_type = structure_type
-        item.car_bays = car_bays
-        # Shape (Shade Sail) no longer has a grid column - preserve
-        # whatever was already stored rather than clearing it.
         item.width_m = width_m
         item.projection_m = projection_m
-        # No per-row height field anymore - any charge for height above
-        # the 2.1m standard is its own "Additional Height" line item
-        # instead. A real structure still needs a height for its own
-        # geometry/pricing, so keep the standard default.
-        item.height_m = DEFAULT_HEIGHT_M if structure_type in STRUCTURE_TYPES else None
         colour = widgets["colour"].get().strip()
         item.colour = "" if colour == "N/A" else colour
         item.description = widgets["description"].get()
@@ -695,82 +593,6 @@ class QuoteDetailWindow(ctk.CTkToplevel):
             return
 
         self.refresh()
-
-    def calculate_prices(self):
-        """Fill line-item prices from real supplier costs.
-
-        Prices every Cantilever/Standard row whose size is known, using
-        core/structure_quote - materials from the editable Supplier
-        Pricing table, plus labour, paint, netting, cable and clamps,
-        marked up to the gross profit target. Rows it cannot price
-        (Shade Sail, maintenance items, 4-bay structures) are left alone
-        and reported, never silently zeroed or guessed at.
-        """
-
-        if not self._editable:
-            return
-
-        from core.structure_quote import STRUCTURE_GP, can_price, quote_structure, size_for_car_bays
-
-        items = self.quote_service.list_line_items(self.quote_id)
-        priceable = [item for item in items if can_price(item.structure_type, item.car_bays)]
-
-        if not priceable:
-            messagebox.showinfo(
-                "Calculate Prices",
-                "No rows can be priced automatically.\n\n"
-                "Automatic pricing covers Cantilever and Standard structures "
-                "sized 1-3 car bays. Shade sails, maintenance items and 4-bay "
-                "structures are still priced by hand.",
-                parent=self,
-            )
-            return
-
-        options = PricingOptionsDialog.ask(self, len(priceable))
-        if options is None:
-            return
-
-        already_priced = [item for item in priceable if item.unit_price_minor]
-        if already_priced and not messagebox.askyesno(
-            "Calculate Prices",
-            f"{len(already_priced)} of these rows already have a price.\n\nOverwrite them?",
-            parent=self,
-        ):
-            priceable = [item for item in priceable if not item.unit_price_minor]
-            if not priceable:
-                return
-
-        priced, failures = 0, []
-        for item in priceable:
-            try:
-                gp = options.get("gp", STRUCTURE_GP)
-                quote = quote_structure(
-                    item.structure_type,
-                    size_for_car_bays(item.car_bays),
-                    net_supplier=options["net_supplier"],
-                    include_paint=options["include_paint"],
-                    include_netting=options["include_netting"],
-                    back_to_back=options["back_to_back"],
-                    structure_gp=gp,
-                    netting_gp=gp,
-                )
-                item.unit_price_minor = round(quote["total_sell"] * 100)
-                self.quote_service.save_line_item(item)
-                priced += 1
-            except ValueError as error:
-                failures.append(f"{item.structure_type}: {error}")
-
-        self.refresh()
-
-        skipped = len(items) - len(priceable)
-        gp_pct = int(options.get("gp", STRUCTURE_GP) * 100)
-        summary = f"Priced {priced} row(s) at {gp_pct}% GP."
-        if skipped:
-            summary += f"\n{skipped} row(s) left alone - not automatically priceable."
-        if failures:
-            summary += "\n\nCould not price:\n" + "\n".join(failures[:5])
-
-        messagebox.showinfo("Calculate Prices", summary, parent=self)
 
     def _delete_row(self, item_id):
 
@@ -835,45 +657,12 @@ class QuoteDetailWindow(ctk.CTkToplevel):
 
         self.quote_service.set_status(self.quote_id, status, current_actor())
         if status == "Accepted":
-            self._offer_job_card()
             self.open_statement()
         self.refresh()
 
     def open_statement(self):
         quote = self.quote_service.get_quote(self.quote_id)
         StatementEditorWindow(self.winfo_toplevel(), customer_id=quote.customer_id if quote else None)
-
-    def _offer_job_card(self):
-        from core.job_card_service import JobCardService
-        from tkinter import messagebox as mb
-        quote = self.quote_service.get_quote(self.quote_id)
-        if quote is None:
-            return
-        customer = self.crm_service.get_customer(quote.customer_id)
-        if customer is None:
-            return
-        answer = mb.askyesno(
-            "Create Job Card",
-            f"Quote accepted — create a Job Card for {customer.name}?",
-            parent=self,
-        )
-        if not answer:
-            return
-        try:
-            svc = JobCardService()
-            jc = svc.create_job_card_from_quote(
-                customer,
-                site_id=quote.site_id or "",
-                actor=current_actor(),
-                quote_number=quote.quote_number,
-                purchase_order=quote.po_number or "",
-                bill_to=quote.bill_to_name or customer.name,
-                accepted_date=quote.accepted_date or "",
-            )
-            from modules.site_visit.windows import JobCardWindow
-            JobCardWindow(self.winfo_toplevel(), customer, jc, on_change=self.refresh)
-        except Exception as exc:
-            mb.showerror("Job Card Error", str(exc), parent=self)
 
     # --------------------------------------------------
 
@@ -1220,7 +1009,7 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         if self.quote_documents.deposit_invoice_for_quote(self.quote_id) is None:
             messagebox.showinfo(
                 "Balance Invoice",
-                f"Generate the Deposit Invoice ({DEPOSIT_PERCENT}%) first. "
+                f"Generate the Deposit Invoice ({deposit_percent()}%) first. "
                 "The balance invoice deducts the deposit, so it needs the deposit invoice number.",
                 parent=self,
             )
@@ -1278,8 +1067,8 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         if not self._editable:
             return
         item = self.quote_service.new_line_item(self.quote_id)
-        item.structure_type = CANTILEVER
-        item.height_m = DEFAULT_HEIGHT_M
+        type_options = self.picklists.list_values(LINE_ITEM_TYPE)
+        item.structure_type = type_options[0] if type_options else "Item"
         item.quantity = 1
         try:
             self.quote_service.save_line_item(item)
@@ -1294,106 +1083,6 @@ class QuoteDetailWindow(ctk.CTkToplevel):
             return float(value) if value not in (None, "") else None
         except ValueError:
             return None
-
-
-class PricingOptionsDialog(ctk.CTkToplevel):
-    """What to include when pricing line items from supplier costs.
-
-    These are the choices that genuinely change the number and that
-    Minette makes per job - which net supplier (Knittex has got a lot
-    dearer than Plusnet), whether the structures share anchor poles
-    back-to-back, and whether paint is in (standard on new installs, but
-    not on a frame-only job)."""
-
-    def __init__(self, parent, row_count):
-        super().__init__(parent)
-
-        self.title("Calculate Prices")
-        self.geometry("430x390")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.grab_set()
-
-        self.result = None
-
-        ctk.CTkLabel(
-            self, text=f"Pricing {row_count} line item(s)", font=("Segoe UI", 14, "bold"),
-        ).pack(pady=(15, 4), padx=20, anchor="w")
-        ctk.CTkLabel(
-            self,
-            text="Costs come from Settings > Supplier Pricing, so they stay current.",
-            text_color=COLORS["text_secondary"], wraplength=380, justify="left",
-        ).pack(pady=(0, 12), padx=20, anchor="w")
-
-        ctk.CTkLabel(self, text="Gross profit margin").pack(padx=20, anchor="w")
-        self.gp_var = ctk.StringVar(value="45%")
-        ctk.CTkOptionMenu(
-            self, values=["45%", "65%"], variable=self.gp_var, width=250,
-        ).pack(padx=20, pady=(2, 12), anchor="w")
-
-        ctk.CTkLabel(self, text="Netting supplier").pack(padx=20, anchor="w")
-        self.supplier_var = ctk.StringVar(value="Plusnet")
-        ctk.CTkOptionMenu(
-            self, values=self._netting_suppliers(), variable=self.supplier_var, width=250,
-        ).pack(padx=20, pady=(2, 12), anchor="w")
-
-        self.netting_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(self, text="Include netting, cable and clamps", variable=self.netting_var).pack(
-            padx=20, pady=4, anchor="w",
-        )
-
-        self.paint_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(self, text="Include paint (standard on new installs)", variable=self.paint_var).pack(
-            padx=20, pady=4, anchor="w",
-        )
-
-        self.back_to_back_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(
-            self, text="Back-to-back (shared poles, 10% off steel)", variable=self.back_to_back_var,
-        ).pack(padx=20, pady=4, anchor="w")
-
-        button_row = ctk.CTkFrame(self, fg_color="transparent")
-        button_row.pack(fill="x", padx=20, pady=(16, 15))
-        ctk.CTkButton(button_row, text="Cancel", command=self._cancel, width=100).pack(side="right", padx=4)
-        ctk.CTkButton(button_row, text="Calculate", command=self._ok, width=100).pack(side="right", padx=4)
-
-        self.protocol("WM_DELETE_WINDOW", self._cancel)
-        self.bind("<Return>", lambda _event: self._ok())
-        self.bind("<Escape>", lambda _event: self._cancel())
-
-    def _netting_suppliers(self):
-
-        try:
-            from core.supplier_pricing_service import SupplierPricingService
-
-            names = [item.supplier_name for item in SupplierPricingService().list_items("Netting")]
-            return sorted(set(names)) or ["Plusnet"]
-        except Exception:
-            return ["Plusnet"]
-
-    def _ok(self):
-
-        from core.structure_quote import GP_OPTIONS
-        gp = GP_OPTIONS.get(self.gp_var.get(), 0.45)
-        self.result = {
-            "net_supplier": self.supplier_var.get(),
-            "include_netting": bool(self.netting_var.get()),
-            "include_paint": bool(self.paint_var.get()),
-            "back_to_back": bool(self.back_to_back_var.get()),
-            "gp": gp,
-        }
-        self.destroy()
-
-    def _cancel(self):
-
-        self.result = None
-        self.destroy()
-
-    @classmethod
-    def ask(cls, parent, row_count):
-        dialog = cls(parent, row_count)
-        dialog.wait_window()
-        return dialog.result
 
 
 class StatementEditorWindow(ctk.CTkToplevel):

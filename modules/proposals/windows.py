@@ -14,7 +14,6 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from modules.proposals.services import ProposalService, AccountingImportService
-from modules.proposals.netting_quotes import MAINTENANCE_ITEMS, NettingQuoteService, NetType, Supplier
 from core.business_settings_service import BusinessSettingsService
 from core.crm_service import CRMService
 from core.proposal_docx import generate_proposal_docx
@@ -45,7 +44,7 @@ class ProposalsPanel(ctk.CTkFrame):
     (module-nav consolidation: "I would like it to open from one
     window" - Minette, 2026-08-04, scope confirmed 2026-08-07). The
     editor/utility windows this launches (ProposalFormWindow,
-    NettingQuoteBuilderWindow, etc.) stay their own Toplevels either
+    GalleryManagerWindow, etc.) stay their own Toplevels either
     way - same precedent as CRM, where the Customers list is a tab but
     CustomerDetailWindow still opens as its own window."""
 
@@ -66,7 +65,6 @@ class ProposalsPanel(ctk.CTkFrame):
         buttons = [
             ("📋 New Proposal", self.new_proposal),
             ("📂 Open Saved Proposal", self.open_saved_proposal),
-            ("🌐 Shade Netting Quotes", self.open_netting_quotes),
             ("📸 Gallery Manager", self.open_gallery),
             ("💳 Accounting Import", self.open_accounting),
         ]
@@ -117,10 +115,6 @@ class ProposalsPanel(ctk.CTkFrame):
         else:
             self.editor_window.lift()
             self.editor_window.focus()
-
-    def open_netting_quotes(self):
-        window = NettingQuoteBuilderWindow(self)
-        self.open_windows.add(window)
 
     def open_gallery(self):
         window = GalleryManagerWindow(self)
@@ -182,17 +176,17 @@ class ProposalsHub(ctk.CTkToplevel):
 
 
 class ProposalFormWindow(ctk.CTkToplevel):
-    """Section-based form editor for the FacilitiesCo Proposal document.
+    """Section-based form editor for the Proposal document.
 
-    The proposal .docx (cover, Scope of Work, Site Inspection, Technical
-    Specs, Why Invest, Types of Structures, Clients, closing) is a
+    The proposal .docx (cover, Scope of Work, timeline, site photos,
+    closing) is a
     multi-section narrative document, not a line-item invoice - so unlike
     QuotesWindow/QuoteDetailWindow this editor is a form whose fields map
     directly onto the variable parts of that template."""
 
     TIMELINE_LABELS = [
-        "1. Site Inspection", "2. Quotation", "3. Order Confirmation",
-        "4. Fabrication", "5. Installation", "6. Final Inspection",
+        "1. Initial Assessment", "2. Quotation", "3. Order Confirmation",
+        "4. Preparation", "5. Delivery", "6. Final Sign-off",
     ]
 
     def __init__(self, parent, proposal=None):
@@ -249,11 +243,8 @@ class ProposalFormWindow(ctk.CTkToplevel):
 
         # --- Scope of Work / Site Details ---
         scope = self._section(scroll, "Scope of Work — Site Details")
-        self._field(scope, "site_area", "Site / Area (e.g. Directors Parking)")
-        self._field(scope, "structure_colour", "Structure Colour")
-        self._field(scope, "netting_colour", "Netting Colour")
-        self._field(scope, "netting_size", "Netting Size (Single/Double/Triple)")
-        self._field(scope, "dimensions", "Dimensions (Width x Length)")
+        self._field(scope, "site_area", "Site / Area")
+        self._field(scope, "dimensions", "Dimensions / Size")
 
         # --- Timeline ---
         timeline = self._section(scroll, "Project Timeline (durations)")
@@ -267,7 +258,7 @@ class ProposalFormWindow(ctk.CTkToplevel):
             self.timeline_entries.append(entry)
 
         # --- Site Inspection ---
-        inspection = self._section(scroll, "Site Inspection")
+        inspection = self._section(scroll, "Site Photos")
         photo_row = ctk.CTkFrame(inspection, fg_color=THEME_SURFACE)
         photo_row.pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(photo_row, text="Add Site Photos...", command=self._pick_photos, width=150).pack(side="left", padx=5)
@@ -277,12 +268,6 @@ class ProposalFormWindow(ctk.CTkToplevel):
         # Thumbnail strip for selected photos (with rotate buttons)
         self._thumb_strip = ctk.CTkFrame(inspection, fg_color=THEME_SURFACE)
         self._thumb_strip.pack(fill="x", padx=10, pady=(0, 5))
-
-        self._field(inspection, "net_double_qty", "Net Replacement — Double Qty")
-        self._field(inspection, "net_triple_qty", "Net Replacement — Triple Qty")
-        self._field(inspection, "painting_light", "Painting — Light (# structures)")
-        self._field(inspection, "painting_medium", "Painting — Medium (# structures)")
-        self._field(inspection, "painting_full", "Painting — Full (# structures)")
 
         # --- Actions ---
         action_frame = ctk.CTkFrame(scroll, fg_color=THEME_DARK_GREY)
@@ -449,9 +434,7 @@ class ProposalFormWindow(ctk.CTkToplevel):
         p = self.proposal
         self.company_entry.delete(0, "end")
         self.company_entry.insert(0, p.client.company_name or "")
-        for key in ("attention", "site", "site_area", "structure_colour", "netting_colour",
-                    "netting_size", "dimensions", "net_double_qty", "net_triple_qty",
-                    "painting_light", "painting_medium", "painting_full"):
+        for key in ("attention", "site", "site_area", "dimensions"):
             if key in self.entries:
                 self.entries[key].delete(0, "end")
                 self.entries[key].insert(0, getattr(p, key, "") or "")
@@ -471,16 +454,8 @@ class ProposalFormWindow(ctk.CTkToplevel):
         p.site = self.entries["site"].get().strip()
         p.client_logo_path = self.logo_path_var.get().strip()
         p.site_area = self.entries["site_area"].get().strip()
-        p.structure_colour = self.entries["structure_colour"].get().strip()
-        p.netting_colour = self.entries["netting_colour"].get().strip()
-        p.netting_size = self.entries["netting_size"].get().strip()
         p.dimensions = self.entries["dimensions"].get().strip()
         p.timeline_durations = [e.get().strip() for e in self.timeline_entries]
-        p.net_double_qty = self.entries["net_double_qty"].get().strip()
-        p.net_triple_qty = self.entries["net_triple_qty"].get().strip()
-        p.painting_light = self.entries["painting_light"].get().strip()
-        p.painting_medium = self.entries["painting_medium"].get().strip()
-        p.painting_full = self.entries["painting_full"].get().strip()
         p.site_photos = list(self.site_photo_paths)
         p.photo_rotations = dict(self.site_photo_rotations)
         return p
@@ -751,378 +726,3 @@ class ProposalsModuleWindow(ctk.CTkFrame):
     def _open_accounting(self):
         hub = self._ensure_hub()
         hub.open_accounting()
-
-
-class NettingQuoteBuilderWindow(ctk.CTkToplevel):
-    """Window for building shade netting quotes with pricing comparison"""
-
-    def __init__(self, parent):
-        super().__init__(parent)
-
-        self.title("Shade Netting Quote Builder")
-        self.geometry("1200x750")
-        self.configure(fg_color=THEME_DARK_GREY)
-
-        self.service = NettingQuoteService()
-        self.crm_service = CRMService()
-        self.quote_service = QuoteService()
-        self.business_settings = BusinessSettingsService()
-        self.current_quote = None
-
-        self._build_ui()
-
-    def _build_ui(self):
-        """Build the quote builder UI"""
-
-        main_frame = ctk.CTkFrame(self, fg_color=THEME_DARK_GREY)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Title
-        ctk.CTkLabel(
-            main_frame,
-            text="Shade Netting Quote Builder",
-            font=("Segoe UI", 18, "bold"),
-            text_color=THEME_TEXT_PRIMARY,
-        ).pack(pady=(0, 20))
-
-        # Customer / Site — required before saving as a real Quote
-        customer_frame = ctk.CTkFrame(main_frame, fg_color=THEME_SURFACE)
-        customer_frame.pack(fill="x", pady=(0, 20))
-
-        ctk.CTkLabel(customer_frame, text="Customer:", text_color=THEME_TEXT_PRIMARY, font=("Segoe UI", 11, "bold")).pack(side="left", padx=(10, 5), pady=10)
-        self._customers = self.crm_service.list_customers()
-        customer_labels = ["(select a customer)"] + [f"{c.customer_number} — {c.name}" for c in self._customers]
-        self._customer_by_label = {f"{c.customer_number} — {c.name}": c for c in self._customers}
-        self.customer_var = ctk.StringVar(value=customer_labels[0])
-        self.customer_dropdown = ctk.CTkOptionMenu(
-            customer_frame, variable=self.customer_var, values=customer_labels,
-            command=self._on_customer_changed, width=260,
-        )
-        self.customer_dropdown.pack(side="left", padx=5, pady=10)
-
-        ctk.CTkLabel(customer_frame, text="Site:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=(15, 5), pady=10)
-        self.site_var = ctk.StringVar(value="(none)")
-        self.site_dropdown = ctk.CTkOptionMenu(customer_frame, variable=self.site_var, values=["(none)"], width=200)
-        self.site_dropdown.pack(side="left", padx=5, pady=10)
-        self._site_by_label = {}
-
-        # Options frame
-        options_frame = ctk.CTkFrame(main_frame, fg_color=THEME_SURFACE)
-        options_frame.pack(fill="x", pady=(0, 20))
-
-        # Block selector
-        block_frame = ctk.CTkFrame(options_frame, fg_color=THEME_SURFACE)
-        block_frame.pack(fill="x", padx=10, pady=10)
-
-        ctk.CTkLabel(block_frame, text="Block Type:", text_color=THEME_TEXT_PRIMARY, font=("Segoe UI", 11, "bold")).pack(side="left", padx=5)
-        self.block_var = ctk.StringVar(value="block_a")
-        for block_name, block_value in [("Block A - New Nets", "block_a"), ("Block B - Paint & Cable", "block_b"), ("Block F - Maintenance", "block_f")]:
-            ctk.CTkRadioButton(block_frame, text=block_name, variable=self.block_var, value=block_value, command=self._update_options).pack(side="left", padx=10)
-
-        # Block A options
-        self.block_a_frame = ctk.CTkFrame(options_frame, fg_color=THEME_SURFACE)
-        self.block_a_frame.pack(fill="x", padx=10, pady=10)
-
-        ctk.CTkLabel(self.block_a_frame, text="Net Type:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.net_type_var = ctk.StringVar(value="Double")
-        net_lengths = {"Single": 8, "Double": 12, "Triple": 16}
-        for net_type in ["Single", "Double", "Triple"]:
-            label = f"{net_type} ({net_lengths[net_type]}m)"
-            ctk.CTkRadioButton(self.block_a_frame, text=label, variable=self.net_type_var, value=net_type).pack(side="left", padx=10)
-
-        ctk.CTkLabel(self.block_a_frame, text="Color:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.color_var = ctk.StringVar(value="Charcoal")
-        self.color_dropdown = ctk.CTkComboBox(self.block_a_frame, variable=self.color_var, values=self.service.get_colors_for_supplier(Supplier.KNITTEX_Z25), width=120)
-        self.color_dropdown.pack(side="left", padx=5)
-
-        ctk.CTkLabel(self.block_a_frame, text="Quantity:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.qty_var = ctk.StringVar(value="1")
-        self.qty_entry = ctk.CTkEntry(self.block_a_frame, textvariable=self.qty_var, width=50)
-        self.qty_entry.pack(side="left", padx=5)
-
-        ctk.CTkLabel(self.block_a_frame, text="Use for Quote:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.block_a_price_var = ctk.StringVar(value="Plusnet (recommended)")
-        ctk.CTkOptionMenu(
-            self.block_a_frame, variable=self.block_a_price_var,
-            values=["Plusnet (recommended)", "Knittex Z25", "High Tier"], width=170,
-        ).pack(side="left", padx=5)
-
-        # Margin control
-        margin_frame = ctk.CTkFrame(options_frame, fg_color=THEME_SURFACE)
-        margin_frame.pack(fill="x", padx=10, pady=10)
-
-        ctk.CTkLabel(margin_frame, text="Margin %:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.margin_var = ctk.StringVar(value="45")
-        self.margin_entry = ctk.CTkEntry(margin_frame, textvariable=self.margin_var, width=60)
-        self.margin_entry.pack(side="left", padx=5)
-
-        # Block B options
-        self.block_b_frame = ctk.CTkFrame(options_frame, fg_color=THEME_SURFACE)
-
-        ctk.CTkLabel(self.block_b_frame, text="Structures:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.structures_var = ctk.StringVar(value="2")
-        ctk.CTkEntry(self.block_b_frame, textvariable=self.structures_var, width=50).pack(side="left", padx=5)
-
-        ctk.CTkLabel(self.block_b_frame, text="Cable (m):", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.cable_var = ctk.StringVar(value="50")
-        ctk.CTkEntry(self.block_b_frame, textvariable=self.cable_var, width=50).pack(side="left", padx=5)
-
-        # Block F options
-        self.block_f_frame = ctk.CTkFrame(options_frame, fg_color=THEME_SURFACE)
-
-        tier_row = ctk.CTkFrame(self.block_f_frame, fg_color=THEME_SURFACE)
-        tier_row.pack(fill="x", padx=10, pady=(10, 0))
-        ctk.CTkLabel(tier_row, text="Tier:", text_color=THEME_TEXT_PRIMARY).pack(side="left", padx=5)
-        self.tier_var = ctk.StringVar(value="standard")
-        ctk.CTkRadioButton(tier_row, text="Standard", variable=self.tier_var, value="standard").pack(side="left", padx=10)
-        ctk.CTkRadioButton(tier_row, text="High", variable=self.tier_var, value="high").pack(side="left", padx=10)
-
-        # Real per-item quantities - the old version always priced a
-        # fixed "example" (1 refit + 1 restitch + 1 cable) regardless of
-        # what she actually needed, so saving it as a real quote would
-        # have saved made-up numbers. Each item defaults to 0 (not
-        # included) and only items she sets a quantity for end up on
-        # the quote.
-        self.maintenance_qty_vars = {}
-        items_row = ctk.CTkFrame(self.block_f_frame, fg_color=THEME_SURFACE)
-        items_row.pack(fill="x", padx=10, pady=10)
-        for key, item in MAINTENANCE_ITEMS.items():
-            item_frame = ctk.CTkFrame(items_row, fg_color=THEME_SURFACE)
-            item_frame.pack(side="left", padx=8)
-            ctk.CTkLabel(item_frame, text=item["description"], text_color=THEME_TEXT_PRIMARY, font=("Segoe UI", 9)).pack()
-            qty_var = ctk.StringVar(value="0")
-            ctk.CTkEntry(item_frame, textvariable=qty_var, width=50).pack()
-            self.maintenance_qty_vars[key] = qty_var
-
-        # Generate / Save buttons
-        button_row = ctk.CTkFrame(main_frame, fg_color=THEME_DARK_GREY)
-        button_row.pack(pady=(0, 20), fill="x")
-
-        ctk.CTkButton(
-            button_row,
-            text="Generate Quote",
-            command=self._generate_quote,
-            height=40,
-            fg_color="#1B7A3D",
-            hover_color="#165a30",
-        ).pack(side="left", fill="x", expand=True, padx=(0, 5))
-
-        ctk.CTkButton(
-            button_row,
-            text="Save as Quote",
-            command=self._save_as_quote,
-            height=40,
-            fg_color=COLORS["accent_primary"],
-            hover_color=COLORS["accent_hover"],
-        ).pack(side="left", fill="x", expand=True, padx=(5, 0))
-
-        # Results frame
-        self.results_frame = ctk.CTkFrame(main_frame, fg_color=THEME_SURFACE)
-        self.results_frame.pack(fill="both", expand=True, pady=10)
-
-        self.results_label = ctk.CTkLabel(
-            self.results_frame,
-            text="Generate a quote to see results",
-            text_color=THEME_TEXT_SECONDARY,
-            font=("Segoe UI", 11),
-            justify="left",
-        )
-        self.results_label.pack(pady=20, padx=20, fill="both", expand=True)
-
-        # Update options visibility
-        self._update_options()
-
-    def _update_options(self):
-        """Show/hide block-specific options"""
-        block = self.block_var.get()
-        self.block_a_frame.pack_forget()
-        self.block_b_frame.pack_forget()
-        self.block_f_frame.pack_forget()
-
-        if block == "block_a":
-            self.block_a_frame.pack(fill="x", padx=10, pady=10)
-            self.margin_var.set("45")
-        elif block == "block_b":
-            self.block_b_frame.pack(fill="x", padx=10, pady=10)
-            self.margin_var.set("60")
-        elif block == "block_f":
-            self.block_f_frame.pack(fill="x", padx=10, pady=10)
-
-    def _generate_quote(self):
-        """Generate and display the quote"""
-        try:
-            block = self.block_var.get()
-
-            if block == "block_a":
-                net_type_map = {"Single": NetType.SINGLE, "Double": NetType.DOUBLE, "Triple": NetType.TRIPLE}
-                net_type = net_type_map[self.net_type_var.get()]
-                color = self.color_var.get()
-                qty = int(self.qty_var.get())
-                margin = float(self.margin_var.get())
-
-                quote = self.service.create_comparison_quote(
-                    net_type=net_type,
-                    color=color,
-                    qty=qty,
-                    margin_percent=margin,
-                )
-
-                result_text = f"NET TYPE: {quote['net_type']}\nCOLOR: {quote['color']}\nQTY: {quote['qty']}\nMARGIN: {quote['margin_percent']}%\n\n"
-                result_text += "KNITTEX Z25:\n"
-                result_text += f"  Supply Cost:    R{quote['knittex_z25']['supply_cost']:>10,.2f}\n"
-                result_text += f"  Quote Price:    R{quote['knittex_z25']['quote_price']:>10,.2f}\n"
-                result_text += f"  Delivery:       R{quote['knittex_z25']['delivery']:>10,.2f}\n"
-                result_text += f"  FINAL PRICE:    R{quote['knittex_z25']['final_price']:>10,.2f}\n\n"
-                result_text += "PLUSNET (RECOMMENDED):\n"
-                result_text += f"  Supply Cost:    R{quote['plusnet']['supply_cost']:>10,.2f}\n"
-                result_text += f"  Quote Price:    R{quote['plusnet']['quote_price']:>10,.2f}\n"
-                result_text += f"  Delivery:       R{quote['plusnet']['delivery']:>10,.2f}\n"
-                result_text += f"  FINAL PRICE:    R{quote['plusnet']['final_price']:>10,.2f}\n\n"
-                result_text += f"MARGIN DIFFERENCE: R{quote['margin_difference']:,.2f}"
-
-            elif block == "block_b":
-                num_structures = int(self.structures_var.get())
-                cable_m = int(self.cable_var.get())
-                margin = float(self.margin_var.get())
-
-                quote = self.service.create_painting_cable_quote(
-                    num_structures=num_structures,
-                    cable_meters=cable_m if cable_m > 0 else None,
-                    margin_percent=margin,
-                )
-
-                result_text = f"BLOCK B: PAINTING & CABLE\nMARGIN: {quote['margin_percent']}%\n\n"
-                result_text += "LINE ITEMS:\n"
-                for item in quote['line_items']:
-                    result_text += f"  {item['description']:<45} R{item['total']:>10,.2f}\n"
-                result_text += f"\nTOTAL COST:   R{quote['total_cost']:>10,.2f}\n"
-                result_text += f"FINAL PRICE:  R{quote['total_price']:>10,.2f}"
-
-            elif block == "block_f":
-                tier = self.tier_var.get()
-
-                items = {
-                    key: int(qty_var.get())
-                    for key, qty_var in self.maintenance_qty_vars.items()
-                    if qty_var.get().strip() and int(qty_var.get()) > 0
-                }
-                if not items:
-                    raise ValueError("Set a quantity for at least one maintenance item.")
-
-                quote = self.service.create_maintenance_quote(
-                    items=items,
-                    tier=tier,
-                )
-
-                result_text = f"BLOCK F: MAINTENANCE\nTIER: {quote['tier'].upper()}\n\n"
-                result_text += "LINE ITEMS:\n"
-                for item in quote["line_items"]:
-                    result_text += f"  {item['description']:<45} R{item['total']:>10,.2f}\n"
-                result_text += f"\nTOTAL PRICE:  R{quote['total_price']:>10,.2f}"
-
-            self.results_label.configure(text=result_text)
-            self.current_quote = quote
-            self.current_quote_block = block
-
-        except Exception as e:
-            self.results_label.configure(text=f"Error: {str(e)}", text_color="#FF6B6B")
-
-    def _on_customer_changed(self, _value=None):
-        """Refresh the Site dropdown to the selected customer's real
-        sites (e.g. Cavaleros' Block A-F properties) - unrelated to
-        this window's own "Block A/B/F" quote-category radio buttons
-        above, which are about what's being quoted, not where."""
-
-        customer = self._customer_by_label.get(self.customer_var.get())
-        self._site_by_label = {}
-        if customer is None:
-            self.site_dropdown.configure(values=["(none)"])
-            self.site_var.set("(none)")
-            return
-
-        sites = self.crm_service.list_sites(customer.id)
-        labels = ["(none)"] + [site.name for site in sites]
-        self._site_by_label = {site.name: site.id for site in sites}
-        self.site_dropdown.configure(values=labels)
-        self.site_var.set("(none)")
-
-    def _save_as_quote(self):
-        """Turn the last generated calculation into a real, saved Quote
-        linked to a customer - previously "Generate Quote" only printed
-        a result to a text box, with nothing saved or findable
-        afterward; she had to manually re-type the numbers into an
-        actual quote."""
-
-        if self.current_quote is None:
-            messagebox.showwarning("Save as Quote", "Generate a quote first.", parent=self)
-            return
-
-        customer = self._customer_by_label.get(self.customer_var.get())
-        if customer is None:
-            messagebox.showwarning("Save as Quote", "Select a customer first.", parent=self)
-            return
-        site_id = self._site_by_label.get(self.site_var.get(), "")
-
-        block = self.current_quote_block
-        quote_data = self.current_quote
-        line_items = []
-
-        if block == "block_a":
-            structure_type_by_net = {
-                "Single": "New Net - Single", "Double": "New Net - Double", "Triple": "New Net - Triple",
-            }
-            structure_type = structure_type_by_net.get(self.net_type_var.get(), "New Net - Double")
-            qty = quote_data["qty"]
-            choice = self.block_a_price_var.get()
-            if choice.startswith("Knittex"):
-                final_price, supplier_label = quote_data["knittex_z25"]["final_price"], "Knittex Z25"
-            elif choice.startswith("High"):
-                final_price, supplier_label = quote_data["high_tier_price"], "High Tier"
-            else:
-                final_price, supplier_label = quote_data["plusnet"]["final_price"], "Plusnet"
-            unit_price_minor = round((final_price / qty) * 100)
-            description = f"{quote_data['color']} {quote_data['net_type']} netting - {supplier_label}"
-            line_items.append((structure_type, description, qty, unit_price_minor))
-
-        elif block == "block_b":
-            for item in quote_data["line_items"]:
-                structure_type = "Replace Cable" if "Cable" in item["description"] else "Repaint Structure"
-                unit_price_minor = round(item["unit_price"] * 100)
-                line_items.append((structure_type, item["description"], item["qty"], unit_price_minor))
-
-        elif block == "block_f":
-            structure_type_by_key = {
-                "refit_net": "Refit Net", "restitch_net": "Restitch Net", "retensioning": "Retensioning",
-                "replace_cable": "Replace Cable", "repaint_structure": "Repaint Structure",
-            }
-            tier = self.tier_var.get()
-            for key, qty_var in self.maintenance_qty_vars.items():
-                qty = int(qty_var.get()) if qty_var.get().strip() else 0
-                if qty <= 0:
-                    continue
-                unit_price_minor = round(MAINTENANCE_ITEMS[key][tier] * 100)
-                line_items.append((structure_type_by_key[key], MAINTENANCE_ITEMS[key]["description"], qty, unit_price_minor))
-
-        if not line_items:
-            messagebox.showwarning("Save as Quote", "Nothing to save.", parent=self)
-            return
-
-        try:
-            quote = self.quote_service.new_quote(customer.id, site_id)
-            quote = self.quote_service.save_quote(quote, current_actor())
-            for structure_type, description, qty, unit_price_minor in line_items:
-                line_item = self.quote_service.new_line_item(quote.id)
-                line_item.structure_type = structure_type
-                line_item.description = description
-                line_item.quantity = qty
-                line_item.unit_price_minor = unit_price_minor
-                self.quote_service.save_line_item(line_item)
-        except ValueError as error:
-            messagebox.showerror("Save as Quote", str(error), parent=self)
-            return
-
-        messagebox.showinfo("Save as Quote", f"Saved as a real quote for {customer.name}.", parent=self)
-
-        from modules.quotes.windows import QuoteDetailWindow
-
-        QuoteDetailWindow(self, self.quote_service, self.crm_service, self.business_settings, quote.id)

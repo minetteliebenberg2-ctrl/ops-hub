@@ -70,7 +70,7 @@ class DocumentsWindow(ctk.CTkFrame):
         ctk.CTkLabel(self, text="Documents", font=("Segoe UI", 22, "bold")).pack(pady=(18, 2))
         ctk.CTkLabel(
             self,
-            text="Create letters and spreadsheets on the FacilitiesCo letterhead, "
+            text="Create letters and spreadsheets on the business letterhead, "
                  "and keep compliance documents where you can find them.",
         ).pack(pady=(0, 12))
 
@@ -195,7 +195,7 @@ class DocumentsWindow(ctk.CTkFrame):
             )
             return
 
-        default_name = f"FacilitiesCo {label} {datetime.now():%Y-%m-%d}{suffix}"
+        default_name = f"{label} {datetime.now():%Y-%m-%d}{suffix}"
         destination = filedialog.asksaveasfilename(
             title=f"New {label}", defaultextension=suffix, initialfile=default_name,
             filetypes=[(f"{label} files", f"*{suffix}"), ("All files", "*.*")],

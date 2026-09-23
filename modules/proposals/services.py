@@ -46,7 +46,7 @@ class ProposalData:
     gallery_images: list = None
     accounting_data: dict = None
 
-    # -- Proposal document form fields (FacilitiesCo_Proposal_Template_A4) --
+    # -- Proposal document form fields (some legacy fields kept for saved-proposal compatibility) --
     attention: str = ""
     site: str = ""
     site_area: str = ""
@@ -85,7 +85,8 @@ class ProposalService:
     """Service for managing proposals — backed by the proposals DB table."""
 
     def __init__(self):
-        self._db = get_project_root() / "database" / "fc_hub.db"
+        from core import database as _database
+        self._db = _database.DATABASE_PATH
 
     def _conn(self):
         conn = sqlite3.connect(self._db)

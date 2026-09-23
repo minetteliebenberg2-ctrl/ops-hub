@@ -85,57 +85,10 @@ def test_non_structural_description_omits_leftover_structural_detail():
     assert format_line_item_description(item) == "Refit Net"
 
 
-def test_structural_description_still_includes_height():
-    item = QuoteLineItem(
-        structure_type=STANDARD,
-        car_bays=2,
-        shape="",
-        width_m=5.0,
-        projection_m=5.0,
-        height_m=2.1,
-        description="",
-        quantity=1,
-        unit_price_minor=100000,
-    )
-
-    description = format_line_item_description(item)
-    assert "2.1m height" in description
-    assert "2 Car Bay" in description
-
-
-def test_auto_description_includes_the_selected_colour():
-    # Real bug: colour was saved on the line item and shown in the
-    # grid, but never made it into the generated PDF text.
-    item = QuoteLineItem(
-        structure_type=STANDARD,
-        car_bays=2,
-        shape="",
-        width_m=5.0,
-        projection_m=5.0,
-        height_m=2.1,
-        colour="Royal Blue/Charcoal",
-        description="",
-        quantity=1,
-        unit_price_minor=100000,
-    )
-
-    assert "Royal Blue/Charcoal" in format_line_item_description(item)
-
-
-def test_auto_description_omits_colour_when_not_set():
-    item = QuoteLineItem(
-        structure_type=STANDARD,
-        car_bays=2,
-        shape="",
-        width_m=5.0,
-        projection_m=5.0,
-        height_m=2.1,
-        colour="",
-        description="",
-        quantity=1,
-        unit_price_minor=100000,
-    )
-
-    description = format_line_item_description(item)
-    assert "2.1m height" in description
-    assert description.endswith("2.1m height)")
+def test_description_prefers_typed_text_then_item_type():
+    """Ops Hub is generic: the PDF description is the typed description,
+    else the item type, never shade-structure detail."""
+    item = QuoteLineItem(structure_type="Consulting", description="")
+    assert format_line_item_description(item) == "Consulting"
+    item.description = "Two days on site"
+    assert format_line_item_description(item) == "Two days on site"

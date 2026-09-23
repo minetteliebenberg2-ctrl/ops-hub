@@ -73,16 +73,24 @@ def test_import_bank_statement_parses_and_categorizes(ledger_service, tmp_path):
     assert len(transactions) == 6
     assert all(t.source == SOURCE_BANK_IMPORT for t in transactions)
 
+    # Ops Hub went generic on 2026-09-23: the payee/merchant-name rules
+    # were stripped from AUTO_CATEGORY_RULES, so anything that isn't a
+    # bank-generated description imports UNCATEGORISED and is tagged by
+    # hand or through bulk recategorise.
     pharmacy = next(t for t in transactions if "PHARMACY" in t.description)
-    assert pharmacy.category == "Pharmacy"
+    assert pharmacy.category == ""
     assert pharmacy.transaction_type == EXPENSE
     assert pharmacy.amount_minor == 39163
 
     income_row = next(t for t in transactions if t.transaction_type == INCOME)
     assert income_row.amount_minor == 1500000
 
+    # The neutral rules that survive: bank-generated descriptions only.
     fees = next(t for t in transactions if "SERVICE FEES" in t.description)
     assert fees.category == "Bank Fees"
+
+    fuel = next(t for t in transactions if "SASOL" in t.description)
+    assert fuel.category == ""
 
 
 def test_reimporting_same_statement_skips_all_as_duplicates(ledger_service, tmp_path):
@@ -137,9 +145,11 @@ def test_get_summary_totals_income_and_expenses(ledger_service, tmp_path):
 
     assert summary["transaction_count"] == 6
     assert summary["total_income_minor"] == 1500000
-    # Pharmacy (39163) auto-categorized as "Pharmacy" which is in
-    # TRANSFER_LIKE_CATEGORIES — excluded from expense totals.
-    assert summary["total_expenses_minor"] == 1000 * 100 + 2450 * 100 + 2990 + 5536
+    # Every expense row counts now: with the payee-name rules gone the
+    # pharmacy row (39163) imports uncategorised instead of landing in
+    # "Pharmacy", which is one of the TRANSFER_LIKE_CATEGORIES that get
+    # excluded from expense totals.
+    assert summary["total_expenses_minor"] == 1000 * 100 + 2450 * 100 + 39163 + 2990 + 5536
     assert summary["net_profit_minor"] == summary["total_income_minor"] - summary["total_expenses_minor"]
     assert "2026-04" in summary["by_month"]
     assert "2026-03" in summary["by_month"]

@@ -14,8 +14,10 @@ from datetime import datetime, timedelta
 
 from core.crm_service import CRMService
 from core.quote_document import (
-    BALANCE, BALANCE_PERCENT, DEPOSIT, DEPOSIT_PERCENT, PRO_FORMA, TAX_INVOICE,
+    BALANCE, DEPOSIT, PRO_FORMA, TAX_INVOICE, deposit_percent,
 )
+from core.business_settings_repository import BusinessSettingsRepository
+from core.business_settings_service import BusinessSettingsService
 from core.quote_document_repository import QuoteDocumentRepository
 from core.quote_service import QuoteService
 
@@ -24,11 +26,20 @@ DEFAULT_INVOICE_DUE_DAYS = 30
 
 class QuoteDocumentService:
 
-    def __init__(self, repository=None, quote_service=None, crm_service=None):
+    def __init__(self, repository=None, quote_service=None, crm_service=None,
+                 business_settings_service=None):
 
         self.repository = repository or QuoteDocumentRepository()
         self.quote_service = quote_service or QuoteService()
         self.crm_service = crm_service or CRMService()
+        # Bound to the SAME database as the document repository so the
+        # deposit % is read from the database this service is actually
+        # writing to - tests run against a temp database, and a service
+        # that reached past it to the live one would read the wrong
+        # split.
+        self.business_settings = business_settings_service or BusinessSettingsService(
+            settings_repository=BusinessSettingsRepository(db=self.repository.db),
+        )
 
     # --------------------------------------------------
 
@@ -67,11 +78,17 @@ class QuoteDocumentService:
 
     # --------------------------------------------------
 
-    @staticmethod
-    def split_amounts(total_minor):
-        """(deposit, balance) in cents - always 65/35, summing exactly."""
+    def deposit_percent(self):
+        """The deposit split from Business Settings (v0058). Read once
+        per call so a change in Settings takes effect immediately."""
 
-        deposit = int(round(total_minor * DEPOSIT_PERCENT / 100))
+        return deposit_percent(self.business_settings)
+
+    def split_amounts(self, total_minor):
+        """(deposit, balance) in cents at the configured split, summing
+        exactly - the balance is the remainder, never rounded on its own."""
+
+        deposit = int(round(total_minor * self.deposit_percent() / 100))
         return deposit, total_minor - deposit
 
     def deposit_invoice_for_quote(self, quote_id):
@@ -83,7 +100,7 @@ class QuoteDocumentService:
         )
 
     def generate_deposit_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS):
-        """Tax Invoice for the 65% deposit: one line, own I_ number."""
+        """Tax Invoice for the deposit portion: one line, own I_ number."""
 
         quote = self._require_issued_quote(quote_id)
         deposit, _balance = self.split_amounts(quote.total_minor)
@@ -94,11 +111,13 @@ class QuoteDocumentService:
         )
 
     def generate_balance_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS):
-        """Tax Invoice for the 35% balance. Needs the deposit invoice first."""
+        """Tax Invoice for the balance portion. Needs the deposit invoice first."""
 
         quote = self._require_issued_quote(quote_id)
         if self.deposit_invoice_for_quote(quote_id) is None:
-            raise ValueError("Generate the Deposit Invoice (65%) first - the balance invoice deducts it.")
+            raise ValueError(
+                f"Generate the Deposit Invoice ({self.deposit_percent()}%) first - the balance invoice deducts it."
+            )
         _deposit, balance = self.split_amounts(quote.total_minor)
         deposit_vat, _ = self.split_amounts(quote.vat_minor)
         balance_vat = quote.vat_minor - deposit_vat

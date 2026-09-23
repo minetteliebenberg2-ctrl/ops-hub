@@ -32,11 +32,12 @@ from core.document_pdf import (
     INK_COLOR,
     PAGE_MARGIN,
     PROOF_OF_PAYMENT_NOTE,
+    proof_of_payment_note,
     RULE_COLOR,
     draw_page_frame,
 )
 from core.quote import format_quote_number
-from core.quote_document import PRO_FORMA, TAX_INVOICE
+from core.quote_document import PRO_FORMA, TAX_INVOICE, deposit_percent
 from core.quote_pdf import format_address_lines, format_line_item_description, format_money, push_down_spacer_mm, resolved_or_tbc
 
 
@@ -46,6 +47,23 @@ DOCUMENT_TITLES = {
     PRO_FORMA: "PRO FORMA INVOICE",
     TAX_INVOICE: "TAX INVOICE",
 }
+
+
+def _deposit_percent_for(document, quote):
+    """The deposit % to print on a deposit invoice.
+
+    Derived from the amounts actually snapshotted on the document so a
+    historical invoice keeps the split it was raised at, even after the
+    Business Settings deposit % is changed. Falls back to the current
+    setting when the quote total is unusable.
+    """
+
+    total = getattr(quote, "total_minor", 0) or 0
+    if total > 0:
+        derived = round(document.total_minor / total * 100)
+        if 1 <= derived <= 99:
+            return derived
+    return deposit_percent()
 
 
 def _styles():
@@ -71,7 +89,7 @@ def _header_and_rule(story, business_settings, styles):
         logo._restrictSize(65 * mm, 16 * mm)
         logo_cell = logo
 
-    business_lines = [f"<b>{business_settings.trading_name}</b>", BUSINESS_LOCALITY]
+    business_lines = [f"<b>{business_settings.trading_name}</b>"] + ([BUSINESS_LOCALITY] if BUSINESS_LOCALITY else [])
     for value in (business_settings.email, business_settings.phone, business_settings.website):
         if value:
             business_lines.append(value)
@@ -168,7 +186,7 @@ def generate_proforma_pdf(document, quote, line_items, customer, site, business_
 
 def generate_invoice_pdf(document, quote, line_items, customer, site, business_settings, output_path, billing_address=None, site_address=None, delivery_address=None, postal_address=None, contact_name=None, deposit_document=None):
     """Tax Invoice. document.invoice_part selects the variant:
-    '' = normal, 'deposit' = one '65% deposit on <quote>' line,
+    '' = normal, 'deposit' = one '<n>% deposit on <quote>' line,
     'balance' = all quote items + full total, less the deposit invoice,
     balance due. deposit_document names the deposit on a balance invoice."""
     return _generate_quote_derived_pdf(
@@ -274,7 +292,7 @@ def _generate_quote_derived_pdf(doc_type, document, quote, line_items, customer,
     table_data = [["Description", "Qty", "Unit Price", "Amount"]]
     if invoice_part == "deposit":
         table_data.append([
-            Paragraph(f"65% deposit on {format_quote_number(quote)}", styles["body"]),
+            Paragraph(f"{_deposit_percent_for(document, quote)}% deposit on {format_quote_number(quote)}", styles["body"]),
             "1",
             format_money(document.total_minor, quote.currency),
             format_money(document.total_minor, quote.currency),
@@ -475,7 +493,7 @@ def generate_statement_pdf(statement, invoices, customer, business_settings, out
     # asking to be paid, so it needs the banking details just as much.
     tail.append(_terms_box(business_settings, styles, [
         "Please use the document number as reference when making payment. "
-        + PROOF_OF_PAYMENT_NOTE
+        + proof_of_payment_note(business_settings)
     ]))
     story.extend(tail)
 

@@ -175,3 +175,42 @@ def test_archive_and_reactivate_job_card(job_card_service, customer_and_site):
     reactivated = job_card_service.get_job_card(job_card.id)
     assert reactivated.archived_at == ""
 
+
+
+# ------------------------------------------------------------------
+# Regression: Job Costing "+ New Job" for a customer with no sites.
+#
+# job_cards.site_id is NOT NULL with a foreign key onto customer_sites,
+# and customer_sites.address_id is a nullable foreign key onto
+# customer_addresses. CRMService.new_site() defaults address_id to the
+# empty string, which is NOT NULL as far as SQLite is concerned, so
+# saving that site raised "FOREIGN KEY constraint failed" and the
+# dialog could never open a job for a brand-new customer.
+# ------------------------------------------------------------------
+
+
+def test_new_job_for_customer_with_no_sites(test_db, crm_service):
+    from modules.job_costing.windows import NewJobDialog
+
+    customer = crm_service.new_customer()
+    customer.name = "Brand New Client"
+    customer = crm_service.save_customer(customer)
+
+    assert crm_service.list_sites(customer.id) == []
+
+    # Drive the dialog's own logic without building a Tk window.
+    dialog = NewJobDialog.__new__(NewJobDialog)
+    dialog.crm = crm_service
+    dialog._sites = []
+    dialog._site = type("Combo", (), {"get": staticmethod(lambda: "Main Site (will be created)")})()
+
+    site_id = NewJobDialog._site_id_for(dialog, customer)
+
+    assert site_id
+    site = next(s for s in crm_service.list_sites(customer.id) if s.id == site_id)
+    assert site.name == "Main Site"
+    assert not site.address_id
+
+    job = JobCardRepository(db=test_db).create(customer.id, site_id, actor="test")
+    assert job.job_card_number
+    assert job.site_id == site_id

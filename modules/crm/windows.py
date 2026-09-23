@@ -446,11 +446,6 @@ class CRMWindow(ctk.CTkFrame):
             quotes = self.quote_repo.list_for_customer(customer.id)
         except Exception:
             quotes = []
-        from core.job_card_service import JobCardService
-        try:
-            job_cards = JobCardService().list_job_cards_for_customer(customer.id)
-        except Exception:
-            job_cards = []
         try:
             invoices = self.payment_service.list_invoices_with_status(customer.id)
             total_outstanding = sum(max(0, i["balance_minor"]) for i in invoices)
@@ -460,13 +455,12 @@ class CRMWindow(ctk.CTkFrame):
             total_outstanding = 0
             open_inv_count = 0
 
-        active_jobs = [j for j in job_cards if j.status == "Open"]
         accepted = [q for q in quotes if q.status == "Accepted"]
 
         kpi_data = [
             ("Sites", str(len(sites)), f"{len(sites)} block(s)" if sites else "None"),
             ("Quotes", str(len(quotes)), f"{len(accepted)} accepted" if accepted else "None issued"),
-            ("Active Jobs", str(len(active_jobs)), f"{len(active_jobs)} open" if active_jobs else "None"),
+            ("Invoices", str(len(invoices)), f"{len(invoices)} issued" if invoices else "None"),
             ("Outstanding", format_money(total_outstanding), f"{open_inv_count} invoice(s)" if open_inv_count else "Paid up"),
         ]
         for col, (label, value, sub) in enumerate(kpi_data):
@@ -557,20 +551,6 @@ class CRMWindow(ctk.CTkFrame):
                     sf, text=stype, font=FONTS["label_sm"],
                     text_color=COLORS["text_tertiary"], anchor="w",
                 ).pack(anchor="w", fill="x")
-                btn_row = ctk.CTkFrame(sf, fg_color="transparent")
-                btn_row.pack(anchor="w", fill="x", pady=(2, SPACING["xs"]))
-                ctk.CTkButton(
-                    btn_row, text="Site Plan", font=FONTS["label_sm"], height=22,
-                    fg_color=COLORS["surface_tertiary"], text_color=COLORS["text_primary"],
-                    border_width=1, border_color=COLORS["border_default"],
-                    command=lambda s=site: self._open_site_plan(s),
-                ).pack(side="left", padx=(0, 4))
-                ctk.CTkButton(
-                    btn_row, text="Job Cards", font=FONTS["label_sm"], height=22,
-                    fg_color=COLORS["surface_tertiary"], text_color=COLORS["text_primary"],
-                    border_width=1, border_color=COLORS["border_default"],
-                    command=lambda s=site: self._open_job_cards(s),
-                ).pack(side="left")
                 # Divider between sites
                 if i < len(sites) - 1:
                     ctk.CTkFrame(
@@ -607,7 +587,6 @@ class CRMWindow(ctk.CTkFrame):
             ("Activity", lambda p: self._build_activity_tab(p, customer)),
             ("Contacts", lambda p: self._build_contacts_tab(p, customer, contacts)),
             ("Quotes", lambda p: self._build_quotes_tab(p, customer, quotes)),
-            ("Job Cards", lambda p: self._build_job_cards_tab(p, customer, job_cards)),
             ("Invoices", lambda p: self._build_invoices_tab(p, customer, invoices)),
             ("Payments", lambda p: self._build_payments_tab(p, customer)),
             ("Addresses", lambda p: self._build_addresses_tab(p, customer, addresses)),
@@ -828,41 +807,6 @@ class CRMWindow(ctk.CTkFrame):
             ).pack(side="right", padx=(0, SPACING["sm"]))
             ctk.CTkFrame(parent, fg_color=COLORS["border_light"], height=1).pack(fill="x")
 
-    def _build_job_cards_tab(self, parent, customer, job_cards):
-        if not job_cards:
-            ctk.CTkLabel(
-                parent, text="No job cards yet. Job cards are created when a quote is accepted.",
-                font=FONTS["body_sm"], text_color=COLORS["text_tertiary"],
-            ).pack(anchor="w", pady=SPACING["md"])
-            return
-        for jc in job_cards:
-            row = ctk.CTkFrame(parent, fg_color="transparent")
-            row.pack(fill="x", pady=(0, SPACING["xs"]))
-            num = jc.job_card_number or "(No number)"
-            st_color = COLORS["success"] if jc.status == "Open" else COLORS["text_tertiary"]
-            ctk.CTkLabel(
-                row, text=num, font=FONTS["heading_sm"], text_color=COLORS["text_primary"],
-            ).pack(side="left")
-            ctk.CTkLabel(
-                row, text=jc.status or "—", font=FONTS["label_sm"], text_color=st_color,
-            ).pack(side="left", padx=(SPACING["sm"], 0))
-            if jc.purchase_order:
-                ctk.CTkLabel(
-                    row, text=f"PO: {jc.purchase_order}", font=FONTS["body_sm"],
-                    text_color=COLORS["text_secondary"],
-                ).pack(side="left", padx=(SPACING["sm"], 0))
-            ctk.CTkLabel(
-                row, text=(jc.created_at or "")[:10], font=FONTS["body_sm"],
-                text_color=COLORS["text_tertiary"],
-            ).pack(side="left", padx=(SPACING["sm"], 0))
-            ctk.CTkButton(
-                row, text="Open →", font=FONTS["label_sm"], height=22,
-                fg_color="transparent", text_color=COLORS["accent_primary"],
-                hover_color=COLORS["surface_tertiary"], border_width=0,
-                command=lambda j=jc: self._open_job_card_window(j, customer),
-            ).pack(side="right")
-            ctk.CTkFrame(parent, fg_color=COLORS["border_light"], height=1).pack(fill="x")
-
     def _build_invoices_tab(self, parent, customer, invoices):
         invoices = sorted(
             invoices,
@@ -1024,35 +968,6 @@ class CRMWindow(ctk.CTkFrame):
             quote.id,
         )
 
-    def _open_job_card_window(self, job_card, customer):
-        from modules.site_visit.windows import JobCardListWindow
-        sites = self.crm_service.list_sites(customer.id)
-        site = next((s for s in sites if s.id == job_card.site_id), None)
-        if site is None and sites:
-            site = sites[0]
-        if site:
-            JobCardListWindow(self.winfo_toplevel(), customer, site)
-        else:
-            from tkinter import messagebox as mb
-            mb.showinfo("Job Card", f"Job Card {job_card.job_card_number} — no site linked. Open via Sites tab.", parent=self.winfo_toplevel())
-
-    def _new_job_card(self, customer):
-        from core.job_card_service import JobCardService
-        from tkinter import messagebox as mb
-        try:
-            sites = self.crm_service.list_sites(customer.id)
-        except Exception:
-            sites = []
-        site_id = sites[0].id if sites else ""
-        try:
-            jc = JobCardService().create_job_card_from_quote(
-                customer, site_id=site_id, actor=self._actor()
-            )
-            mb.showinfo("Job Card Created", f"Job Card {jc.job_card_number} created.", parent=self.winfo_toplevel())
-            self._show_customer_detail(customer)
-        except Exception as exc:
-            mb.showerror("Job Card Error", str(exc), parent=self.winfo_toplevel())
-
     def _actor(self):
         try:
             from core.auth import current_actor
@@ -1117,14 +1032,6 @@ class CRMWindow(ctk.CTkFrame):
         )
         # Re-render detail view to show new sites
         self._show_customer_detail(customer)
-
-    def _open_site_plan(self, site):
-        from modules.site_visit.windows import SitePlanWindow
-        SitePlanWindow(self.winfo_toplevel(), self.selected_customer, site)
-
-    def _open_job_cards(self, site):
-        from modules.site_visit.windows import JobCardListWindow
-        JobCardListWindow(self.winfo_toplevel(), self.selected_customer, site)
 
     def _add_address(self, customer):
         """Open the address form; on save, re-render the customer detail."""

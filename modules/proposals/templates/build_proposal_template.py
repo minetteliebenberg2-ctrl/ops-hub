@@ -342,7 +342,9 @@ styled_table(
 
 doc.add_paragraph().paragraph_format.space_after = Pt(4)
 h2(doc, "What Is Expected From You")
-bullet(doc, "A deposit of 65% is required on confirmation of order, 35% balance on completion")
+from core.quote_document import balance_percent, deposit_percent  # noqa: E402
+bullet(doc, f"A deposit of {deposit_percent()}% is required on confirmation of order, "
+            f"{balance_percent()}% balance on completion")
 bullet(doc, "Confirmation of order is a signed quotation and deposit sent to FacilitiesCo")
 bullet(doc, "The price on the quotation is all-inclusive \u2014 VAT is not applicable")
 bullet(doc, "Site access arranged for inspection, installation, and final sign-off")

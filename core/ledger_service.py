@@ -106,88 +106,24 @@ TRANSFER_LIKE_CATEGORIES = {
     "Loan repayment",
 }
 
-# Auto-categorization rules for bank-statement imports (the ledger
-# audit importer needs none of this - it already carries the real
-# category on every row). These aren't guesses either: mined from
-# Minette's real ledger audit export by normalizing each transaction's
-# description (stripping card numbers/dates) and keeping only merchant
-# patterns that appeared at least twice with the same category at
-# least 80% of the time. Ordered longest-keyword-first so a specific
-# match (e.g. "PURCH LILY PHARMACY") wins over a shorter, more generic
-# one before it. First match wins; anything unmatched is left
-# uncategorized for manual/bulk review rather than guessed wrong.
+# Auto-categorization rules for bank-statement imports.
+#
+# Ops Hub is a generic tool, so the account-specific rule set this
+# started life with (FacilitiesCo subcontractors, netting/steel/paint
+# suppliers, and the owner's personal payees) was removed on
+# 2026-09-23. The bank already categorises its own statements, and a
+# rule matching someone else's payee names would mis-tag every row.
+#
+# What is left is deliberately neutral: bank-generated descriptions
+# and the revenue authority. Nothing here names a person, a customer
+# or a supplier. Anything unmatched is imported UNCATEGORISED and is
+# tagged by hand or through the bulk-recategorise screen, which is
+# where saved rules (migration v0032) live - those are the user's own
+# and always win over this list.
 AUTO_CATEGORY_RULES = [
-    ("PHARMACY MINETTE LIEBENBERG", "General Expenses"),
-    ("PURCH S2S*HOMESTEADSUPERST", "Op Cost: General Operating"),
-    ("GEORGE LOBISI FACILITIESCO", "Subcontractor Wages"),
-    ("MNV PROJECTS FACILITIESCO", "Subcontract Costs"),
-    ("BUSINESS SAVINGS BUSINESS", "Legal Fees"),
-    ("PURCH KWIKSPAR HOMESTEAD", "Personal Expenses through Business Accounts"),
-    ("GEORGE LOBISI BALANCE", "Subcontractor Wages"),
-    ("GEORGE LOBISI", "Subcontractor Wages"),
-    ("GEORGE GEORGE", "Subcontractor Wages"),
-    ("PURCH KFC MEADOWDALE", "Business Meals"),
     ("#MONTHLY ACCOUNT FEE", "Bank Fees"),
-    ("EDDIE BOTHA SKADUNET", "Sales Income"),
-    ("MNV PROJECTS MINETTE", "Subcontract Costs"),
-    ("PURCH TLT INDUSTRIAL", "Direct Selling Costs"),
-    ("JACK CAVALEROS WAGES", "Subcontractor Wages"),
-    ("JACK CAVALEROS", "Subcontractor Wages"),
-    ("JACK BENJAMIN CRECHE", "Payroll Expenses"),
-    ("ALSTAN INDUSTRIAL", "Hardware"),
-    ("PURCH LILY PHARMACY", "General Expenses"),
-    ("ABSA BANK DOMINIQUE", "Sales Income"),
-    ("PURCH VOLCANO VAPES", "Directors Fees & Remuneration"),
-    ("SEND LUCKY STITCHER", "Subcontract Costs"),
-    ("BENJAMIN PREPATORY", "Sales Income"),
-    ("FUEL ENGEN VILLAGE", "Motor V: Fuel & Oil"),
-    ("ABSA CREDIT CARDS", "Credit Card Payment"),
-    ("PURCH RA CELLULAR", "Cell Phone/Communication"),
-    ("VISTA WAGES WAGES", "Payroll Expenses"),
-    ("LOPER AVENUE 18BO", "Sales Income"),
-    ("FNB APP TRANSFER", "Bank:  Inter-account Transfers"),
-    ("SWITCHTEL", "Cell Phone/Communication"),
     ("#SERVICE FEES", "Bank Fees"),
-    ("ZE_001 - ZELLER", "Sales Income"),
-    ("PURCH DIY DEPOT", "Direct Selling Costs"),
-    # Netting/steel/paint suppliers: split out of the old generic
-    # "Direct Selling Costs" bucket per her reference workbook
-    # (2026-08-05, migration v0021) so supplier-level spend is visible
-    # for margin/COGS analysis. Forward-only by her instruction -
-    # transactions already tagged "Direct Selling Costs" before this
-    # change were NOT retagged.
-    ("PLUSNET FACIL01", "Netting Suppliers"),
-    ("KNITTEX QT", "Netting Suppliers"),
-    ("CHEMVET", "Steel Supplier"),
-    ("DURA PAINTS", "Paint Supplier"),
-    ("PURCH PNP CRP", "Groceries"),
-    ("CR VC WALMART", "Groceries"),
-    ("PURCH PICK N", "Groceries"),
-    ("FNB OB PMT", "Sales Income"),
-    ("FNBBROKERS", "Insurance / Security"),
-    ("SASOL", "Motor V: Fuel & Oil"),
-    ("SHELL", "Motor V: Fuel & Oil"),
-    ("NAKED INSURANCE", "Insurance / Security"),
-    ("FFW LI", "Insurance / Security"),
     ("SARS", "Normal Taxation"),
-    # Confirmed with Minette 2026-08-04: PnP/Sixty60/Walmart are
-    # grocery runs; Amazon/Makro default to Office Supplies since
-    # she said those two genuinely vary and she'd rather re-tag the
-    # occasional grocery order than have office supplies mis-tagged.
-    # Broader catch-alls below the specific mined patterns above, so
-    # a new description variant for the same merchant still lands
-    # right without needing another mined rule.
-    ("PICK N PAY", "Groceries"),
-    ("PNP ", "Groceries"),
-    ("SIXTY60", "Groceries"),
-    ("WALMART", "Groceries"),
-    ("AMAZON", "Office Supplies"),
-    ("MAKRO", "Office Supplies"),
-    ("HOME LOAN", "Home Loan"),
-    ("HOMELOAN", "Home Loan"),
-    ("MTN SP", "Cell Phone/Communication"),
-    ("LILY PHARMACY", "Pharmacy"),
-    ("RICO PLUMBING", "Repairs & Maintenance"),
 ]
 
 

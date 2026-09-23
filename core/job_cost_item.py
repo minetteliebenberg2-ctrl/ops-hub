@@ -5,7 +5,7 @@ import uuid
 
 from core.database import database
 
-COST_BUCKETS = ("labour", "cable", "materials", "netting")
+COST_BUCKETS = ("labour", "materials", "transport", "other")
 
 
 @dataclass

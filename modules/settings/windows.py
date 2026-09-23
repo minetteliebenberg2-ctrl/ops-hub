@@ -2,7 +2,7 @@
 # FC Hub - Settings Window
 # ----------------------------------------------------------
 # Purpose:
-# FacilitiesCo's own business details, banking, and business
+# The business's own business details, banking, and business
 # addresses. Distinct from CRM customer records.
 #
 # Author: Minette & James
@@ -116,6 +116,8 @@ class SettingsWindow(ctk.CTkFrame):
             {"key": "bank_account_number", "label": "Bank Account Number", "kind": "text", "initial": settings.bank_account_number},
             {"key": "branch_code", "label": "Branch / BC Code", "kind": "text", "initial": settings.branch_code},
             {"key": "swift_code", "label": "Swift Code", "kind": "text", "initial": settings.swift_code},
+            {"key": "deposit_percent", "label": "Deposit % (balance is the rest)", "kind": "text",
+             "initial": str(settings.deposit_percent or 65)},
             {"key": "notes", "label": "Notes", "kind": "textarea", "initial": settings.notes},
         ]
 
@@ -136,6 +138,7 @@ class SettingsWindow(ctk.CTkFrame):
         settings.bank_account_number = result["bank_account_number"]
         settings.branch_code = result["branch_code"]
         settings.swift_code = result["swift_code"]
+        settings.deposit_percent = result["deposit_percent"]
         settings.notes = result["notes"]
 
         try:
@@ -167,6 +170,10 @@ class SettingsWindow(ctk.CTkFrame):
             f"Account Number:  {settings.bank_account_number}\n"
             f"Branch Code:     {settings.branch_code}\n"
             f"Swift Code:      {settings.swift_code}\n"
+            "\n"
+            "Invoicing\n"
+            f"Deposit:         {settings.deposit_percent}%  "
+            f"(balance {100 - int(settings.deposit_percent or 65)}%)\n"
         )
         if settings.notes:
             text += f"\nNotes\n{settings.notes}\n"
@@ -766,7 +773,7 @@ class SettingsWindow(ctk.CTkFrame):
 
         ctk.CTkLabel(
             tab,
-            text="Cost assumptions for Job KPI — maps line item types to a cost bucket and GP%.",
+            text="Cost assumptions — maps line item types to a cost bucket and GP%.",
             anchor="w",
         ).grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 0))
 
@@ -1338,10 +1345,6 @@ class SupplierPricingImportDialog(ctk.CTkToplevel):
 
     def _auto_detect_supplier(self):
         candidates = [
-            ("Hayford Traders", "hayford"),
-            ("Plusnet", "plusnet"),
-            ("Knittex", "knittex"),
-            ("Toco", "toco"),
         ]
         fname = self._pdf_filename.lower()
         for name, keyword in candidates:

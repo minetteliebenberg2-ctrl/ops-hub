@@ -7,7 +7,8 @@ from core.job_cost_allocation import (
     JobCostAllocation, JobCostAllocationRepository, INCOME, EXPENSE,
 )
 from core.ledger_repository import LedgerTransactionRepository
-from core.crm_repository import CustomerRepository
+from core.crm_repository import AddressRepository, CustomerRepository, SiteRepository
+from core.crm_service import CRMService
 from gui.styles import COLORS
 
 
@@ -29,6 +30,7 @@ class JobCostingModuleWindow(ctk.CTkFrame):
         top.pack(fill="x", padx=10, pady=(10, 5))
         ctk.CTkLabel(top, text="Job Costing", font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
         ctk.CTkButton(top, text="Refresh", width=80, command=self._refresh_jobs).pack(side="right", padx=5)
+        ctk.CTkButton(top, text="+ New Job", width=100, command=self._new_job).pack(side="right", padx=5)
 
         pane = ctk.CTkFrame(self)
         pane.pack(fill="both", expand=True, padx=10, pady=5)
@@ -99,6 +101,16 @@ class JobCostingModuleWindow(ctk.CTkFrame):
             text=f"Total:  Revenue R{total_rev / 100:,.2f}  |  "
                  f"Costs R{total_cost / 100:,.2f}  |  "
                  f"GP R{total_gp / 100:,.2f} ({total_pct})"
+        )
+
+    def _new_job(self):
+        """Jobs used to be created from the Quotes/CRM job-card buttons.
+        Those were removed when Ops Hub went generic, so Job Costing
+        owns the only remaining way to open a job to cost against."""
+
+        NewJobDialog(
+            self.winfo_toplevel(), self.job_card_repo, self.customer_repo,
+            on_saved=self._refresh_jobs,
         )
 
     def _on_job_double_click(self, event):
@@ -230,6 +242,117 @@ class JobCostDetailWindow(ctk.CTkToplevel):
             self.on_change()
 
 
+class NewJobDialog(ctk.CTkToplevel):
+    """Minimal job opener: pick a customer and one of its sites, then
+    give the job a PO and a reference. job_cards.site_id is NOT NULL
+    with a foreign key onto customer_sites, so a job always needs a
+    real site - when a customer has none, this creates a 'Main Site'
+    rather than making her go to CRM and come back."""
+
+    NO_CUSTOMERS = "(no customers - add one in CRM first)"
+
+    def __init__(self, master, job_card_repo, customer_repo, on_saved=None):
+        super().__init__(master)
+        self.job_card_repo = job_card_repo
+        self.customer_repo = customer_repo
+        self.on_saved = on_saved
+        # Bound to the customer repository's database so the dialog
+        # reads and writes the same one the rest of the module does.
+        self.crm = CRMService(
+            customer_repository=customer_repo,
+            site_repository=SiteRepository(db=customer_repo.db),
+            address_repository=AddressRepository(db=customer_repo.db),
+        )
+
+        self.title("New Job")
+        self.geometry("440x340")
+        self.lift()
+        self.focus_force()
+
+        pad = dict(padx=10, pady=4)
+
+        self._customers = sorted(self.customer_repo.list_all(), key=lambda c: (c.name or "").lower())
+        names = [c.name for c in self._customers] or [self.NO_CUSTOMERS]
+
+        ctk.CTkLabel(self, text="Customer:").pack(**pad, anchor="w")
+        self._customer = ctk.CTkComboBox(self, values=names, state="readonly", command=self._load_sites)
+        self._customer.set(names[0])
+        self._customer.pack(fill="x", **pad)
+
+        ctk.CTkLabel(self, text="Site:").pack(**pad, anchor="w")
+        self._site = ctk.CTkComboBox(self, values=["Main Site"], state="readonly")
+        self._site.pack(fill="x", **pad)
+
+        ctk.CTkLabel(self, text="PO / Order number:").pack(**pad, anchor="w")
+        self._po = ctk.CTkEntry(self)
+        self._po.pack(fill="x", **pad)
+
+        ctk.CTkLabel(self, text="Reference / notes:").pack(**pad, anchor="w")
+        self._notes = ctk.CTkEntry(self)
+        self._notes.pack(fill="x", **pad)
+
+        ctk.CTkButton(self, text="Create Job", command=self._save).pack(pady=14)
+
+        self._sites = []
+        self._load_sites(self._customer.get())
+
+    # --------------------------------------------------
+
+    def _selected_customer(self):
+
+        return next((c for c in self._customers if c.name == self._customer.get()), None)
+
+    def _load_sites(self, _choice=None):
+
+        customer = self._selected_customer()
+        self._sites = self.crm.list_sites(customer.id) if customer else []
+        names = [s.name or "(unnamed site)" for s in self._sites] or ["Main Site (will be created)"]
+        self._site.configure(values=names)
+        self._site.set(names[0])
+
+    def _site_id_for(self, customer):
+        """The chosen site's id, creating a default site when the
+        customer has none yet."""
+
+        chosen = self._site.get()
+        for site in self._sites:
+            if (site.name or "(unnamed site)") == chosen:
+                return site.id
+
+        site = self.crm.new_site(customer.id)
+        site.name = "Main Site"
+        # A default site carries no address; SiteRepository.save stores
+        # an empty address_id as NULL so the foreign key is satisfied.
+        addresses = self.crm.list_addresses(customer.id)
+        primary = next((a for a in addresses if getattr(a, "is_primary", False)), None)
+        chosen_address = primary or (addresses[0] if addresses else None)
+        site.address_id = chosen_address.id if chosen_address else ""
+        return self.crm.save_site(site).id
+
+    def _save(self):
+        customer = self._selected_customer()
+        if customer is None:
+            messagebox.showerror(
+                "New Job", "Add a customer in CRM first - a job has to belong to one.", parent=self,
+            )
+            return
+
+        try:
+            site_id = self._site_id_for(customer)
+            job = self.job_card_repo.create(customer.id, site_id, actor="minette")
+            job.purchase_order = self._po.get().strip()
+            job.bill_to_name = customer.name
+            job.notes = self._notes.get().strip()
+            self.job_card_repo.save(job, actor="minette")
+        except Exception as error:
+            messagebox.showerror("New Job", f"Could not create the job:\n{error}", parent=self)
+            return
+
+        self.destroy()
+        if self.on_saved:
+            self.on_saved()
+
+
 class AddAllocationDialog(ctk.CTkToplevel):
 
     def __init__(self, master, alloc_type, job, allocation_repo, on_saved=None):
@@ -262,7 +385,7 @@ class AddAllocationDialog(ctk.CTkToplevel):
 
         if alloc_type == EXPENSE:
             ctk.CTkLabel(self, text="Cost Bucket:").pack(**pad, anchor="w")
-            self._bucket = ctk.CTkComboBox(self, values=["labour", "materials", "netting", "cable", "transport", "other"])
+            self._bucket = ctk.CTkComboBox(self, values=["labour", "materials", "transport", "other"])
             self._bucket.set("materials")
             self._bucket.pack(fill="x", **pad)
         else:
@@ -343,7 +466,7 @@ class BankAllocationDialog(ctk.CTkToplevel):
         assign_frame = ctk.CTkFrame(self)
         assign_frame.pack(fill="x", padx=10, pady=2)
         ctk.CTkLabel(assign_frame, text="Assign as bucket:").pack(side="left", padx=5)
-        self._bucket = ctk.CTkComboBox(assign_frame, values=["labour", "materials", "netting", "cable", "transport", "other"], width=120)
+        self._bucket = ctk.CTkComboBox(assign_frame, values=["labour", "materials", "transport", "other"], width=120)
         self._bucket.set("materials")
         self._bucket.pack(side="left", padx=5)
         ctk.CTkLabel(assign_frame, text="(applied to selected transactions when allocated)", font=ctk.CTkFont(size=11)).pack(side="left", padx=5)

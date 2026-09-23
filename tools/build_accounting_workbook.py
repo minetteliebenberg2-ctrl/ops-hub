@@ -83,7 +83,7 @@ CASH_ACCOUNTS = [
 def _load_app_categories():
     """Income and expense categories as worded in FC Hub's Accounting module."""
 
-    db = Path(__file__).resolve().parent.parent / "database" / "fc_hub.db"
+    db = Path(__file__).resolve().parent.parent / "database" / "app.db"
     if not db.exists():
         return [], []
 
@@ -106,7 +106,7 @@ def _load_supplier_prices():
     edits in Settings -> Supplier Pricing), never from a second copy kept by
     hand - a stale price in the books is worse than no price."""
 
-    db = Path(__file__).resolve().parent.parent / "database" / "fc_hub.db"
+    db = Path(__file__).resolve().parent.parent / "database" / "app.db"
     if not db.exists():
         return []
 
@@ -157,13 +157,21 @@ def _cell(sheet, row, column, value, bold=False, fmt=None, fill=None, size=10):
 # Sheets
 # ----------------------------------------------------------------------
 
+def _biz(field):
+    try:
+        from core.business_settings_service import BusinessSettingsService
+        return getattr(BusinessSettingsService().get_settings(), field, "") or ""
+    except Exception:
+        return ""
+
+
 def build_setup(sheet, fy_start_year):
     _title(sheet, "Setup", "Everything else in this workbook keys off these values.")
     _widths(sheet, [34, 40])
 
     rows = [
-        ("Business name", "FacilitiesCo"),
-        ("Registration number", "2024/772013/07"),
+        ("Business name", _biz("trading_name") or "Business"),
+        ("Registration number", _biz("registration_number")),
         ("VAT registered", "No"),
         ("Financial year starts (1 March)", f"{fy_start_year}-03-01"),
         ("Financial year ends (28/29 February)", f"{fy_start_year + 1}-02-28"),
@@ -694,7 +702,7 @@ def main():
     if output is None:
         exports = Path(__file__).resolve().parent.parent / "exports"
         exports.mkdir(exist_ok=True)
-        output = exports / f"FacilitiesCo_Accounts_FY{fy_start_year}-{str(fy_start_year + 1)[-2:]}.xlsx"
+        output = exports / f"Accounts_FY{fy_start_year}-{str(fy_start_year + 1)[-2:]}.xlsx"
 
     path = build(str(output), fy_start_year)
     print(f"Written: {path}")

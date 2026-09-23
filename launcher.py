@@ -49,7 +49,7 @@ def apply_window_icon(window):
             import ctypes
 
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "FacilitiesCo.FCHub"
+                "OpsHub.App"
             )
         except Exception:
             pass

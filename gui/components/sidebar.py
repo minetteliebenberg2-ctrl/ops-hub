@@ -31,7 +31,6 @@ ICON_MAP = {
     "reports": "📈",
     "settings": "⚙️",
     "calendar": "📅",
-    "shade_sails": "⛵",
     "batch_renamer": "🏷️",
     "annual_compliance": "🗂️",
     "backup": "💾",

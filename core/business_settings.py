@@ -30,6 +30,7 @@ class BusinessSettings:
     bank_account_number: str = ""
     branch_code: str = ""
     swift_code: str = ""
+    deposit_percent: int = 65
     notes: str = ""
     created_at: str = ""
     updated_at: str = ""
