@@ -59,7 +59,7 @@ class BackupServiceTests(unittest.TestCase):
             result = service.create_backup()
 
             self.assertTrue(result.success, result.message)
-            self.assertTrue(result.backup_path.name.startswith("FC_Hub_Backup_"))
+            self.assertTrue(result.backup_path.name.startswith("Ops_Hub_Backup_"))
             manifest = json.loads((result.backup_path / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["backup_format_version"], "1.0")
             self.assertEqual(manifest["status"], "verified")

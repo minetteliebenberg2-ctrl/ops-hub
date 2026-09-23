@@ -414,7 +414,7 @@ class BackupService:
             return []
         summaries: list[BackupSummary] = []
         for path in root.iterdir():
-            if not path.is_dir() or (not path.name.startswith("FC_Hub_Backup_") and not path.name.endswith(".INCOMPLETE")):
+            if not path.is_dir() or (not path.name.startswith(("Ops_Hub_Backup_", "FC_Hub_Backup_")) and not path.name.endswith(".INCOMPLETE")):
                 continue
             try:
                 manifest = self._read_json(path / MANIFEST_NAME)
@@ -722,7 +722,7 @@ class BackupService:
     @staticmethod
     def _unique_backup_name(destination: Path) -> str:
         stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        base = f"FC_Hub_Backup_{stamp}"
+        base = f"Ops_Hub_Backup_{stamp}"
         candidate = destination / base
         counter = 1
         while candidate.exists():
