@@ -7,7 +7,7 @@ from core.database import Database
 from core.ledger_repository import LedgerTransactionRepository
 from core.ledger_service import LedgerService
 from core.ledger_transaction import EXPENSE
-from core.merchant_key import merchant_key
+from core.merchant_key import merchant_key, merchant_matches
 
 
 @pytest.fixture
@@ -79,3 +79,55 @@ def test_resaving_rule_updates_not_duplicates(ledger_service):
     rules = [r for r in ledger_service.list_category_rules() if r["match_key"] == "WOOLWORTHS"]
     assert len(rules) == 1
     assert rules[0]["category"] == "Clothing"
+
+
+# ----------------------------------------------------------
+# Tolerant merchant matching
+# ----------------------------------------------------------
+# FNB appends a different trailing word to nearly every payment, so one
+# payee arrives under several keys ("SEND James Welding", "... Welding",
+# "... New Number"). Those must group; different shops must not.
+
+
+def test_trailing_noise_still_matches_the_same_payee():
+    base = merchant_key("SEND James Welding")
+    for variant in (
+        "SEND James Welding Welding",
+        "SEND James Welding New Number",
+        "SEND James Welding SEND 27718398738",
+    ):
+        assert merchant_matches(base, merchant_key(variant)), variant
+
+
+def test_different_branches_do_not_merge():
+    assert not merchant_matches(
+        merchant_key("SPAR HOMESTEAD 1"), merchant_key("SPAR THE PALMS 2")
+    )
+
+
+def test_different_payees_sharing_a_verb_do_not_merge():
+    assert not merchant_matches(
+        merchant_key("SEND James Welding"), merchant_key("SEND Faith Ndlovu")
+    )
+
+
+def test_a_short_key_never_sweeps_up_longer_ones():
+    assert not merchant_matches("ML", "ML SOMETHING ELSE")
+    assert merchant_matches("ML", "ML")
+
+
+def test_a_generic_only_key_matches_nothing():
+    assert not merchant_matches("SEND", "SEND JAMES WELDING")
+
+
+def test_empty_keys_never_match():
+    assert not merchant_matches("", "")
+    assert not merchant_matches("", "PLUSNET")
+
+
+def test_a_saved_rule_applies_to_the_noisy_variant(ledger_service):
+    ledger_service.save_category_rule(
+        "SEND JAMES WELDING WELDING", "Subcontractor Wages", EXPENSE, "minette"
+    )
+    assert ledger_service.category_for_key("SEND JAMES WELDING") == "Subcontractor Wages"
+    assert ledger_service.category_for_key("SEND FAITH NDLOVU") == ""

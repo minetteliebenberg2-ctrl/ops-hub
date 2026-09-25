@@ -20,7 +20,7 @@ from core.ledger_audit_parser import parse_ledger_audit
 from core.ledger_category import LedgerCategory
 from core.ledger_category_repository import LedgerCategoryRepository
 from core.ledger_repository import LedgerTransactionRepository
-from core.merchant_key import merchant_key
+from core.merchant_key import merchant_key, merchant_matches
 from core.ledger_transaction import (
     EXPENSE, INCOME, SOURCE_BANK_IMPORT, SOURCE_LEDGER_IMPORT, SOURCE_MANUAL, LedgerTransaction,
 )
@@ -433,7 +433,7 @@ class LedgerService:
         for transaction in self.repository.list_all():
             if exclude_id and transaction.id == exclude_id:
                 continue
-            if merchant_key(transaction.description) != key:
+            if not merchant_matches(merchant_key(transaction.description), key):
                 continue
             if same_category_only is not None and (transaction.category or "") != same_category_only:
                 continue
@@ -468,7 +468,22 @@ class LedgerService:
                 "SELECT category FROM ledger_category_rules WHERE match_key = ? AND is_active = 1",
                 (match_key,),
             ).fetchone()
-        return row["category"] if row else ""
+            if row:
+                return row["category"]
+
+            # No exact rule. The bank rarely prints a merchant the same way
+            # twice, so fall back to the same tolerant match the bulk
+            # recategorise uses - longest (most specific) rule wins.
+            candidates = connection.execute(
+                "SELECT match_key, category FROM ledger_category_rules WHERE is_active = 1"
+            ).fetchall()
+        best = ""
+        best_key = ""
+        for candidate in candidates:
+            saved_key = candidate["match_key"] or ""
+            if merchant_matches(saved_key, match_key) and len(saved_key) > len(best_key):
+                best_key, best = saved_key, candidate["category"]
+        return best
 
     # --------------------------------------------------
 

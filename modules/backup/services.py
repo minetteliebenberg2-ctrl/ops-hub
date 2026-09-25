@@ -21,6 +21,7 @@ import shutil
 import string
 import sqlite3
 import subprocess
+import time
 import uuid
 
 from core.app_paths import get_project_root
@@ -385,7 +386,7 @@ class BackupService:
                 "files_checked": verification.files_checked,
             }
             self._write_manifest(manifest_path, manifest)
-            staging.rename(final_path)
+            self._publish_staging(staging, final_path)
             self._audit("backup_completed", backup_path=str(final_path), files=str(len(records)))
             self._audit("verification_completed", backup_path=str(final_path), files=str(verification.files_checked))
             return BackupResult(True, "Backup created and verified.", final_path, final_path / MANIFEST_NAME, verification)
@@ -405,6 +406,31 @@ class BackupService:
                     LOGGER.exception("Could not write the incomplete backup marker.")
             self._audit("backup_failed", destination=str(destination_path), error=str(error))
             return BackupResult(False, f"Backup failed: {error}", staging, manifest_path)
+
+    def _publish_staging(self, staging: Path, final_path: Path) -> None:
+        """Rename the verified staging folder into place, retrying briefly.
+
+        Windows refuses to rename a directory while any file inside it is
+        still open - a virus scanner reading the freshly copied exe, or an
+        Explorer window sitting in the folder, is enough.  The backup is
+        already complete and verified at this point, so a transient lock
+        must not be reported as a failed backup.
+        """
+
+        last_error: OSError | None = None
+        for attempt in range(12):
+            try:
+                staging.rename(final_path)
+                return
+            except OSError as error:
+                last_error = error
+                time.sleep(0.5 if attempt else 0.1)
+        raise BackupError(
+            "The backup was copied and verified, but it could not be renamed "
+            f"to {final_path.name} because something else is holding a file "
+            "open inside it. Close any Explorer window on the backups folder "
+            f"and try again. ({last_error})"
+        )
 
     def list_backups(self, destination: str | Path | None = None) -> list[BackupSummary]:
         """List final and clearly-marked incomplete backups without modifying them."""

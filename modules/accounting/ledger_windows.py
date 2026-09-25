@@ -18,9 +18,18 @@ from tkinter import filedialog, messagebox, ttk
 
 import customtkinter as ctk
 from gui.components.date_picker import DateEntry
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.ticker import FuncFormatter
+try:
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    from matplotlib.ticker import FuncFormatter
+
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:  # pragma: no cover - only hit on an incomplete install
+    # Charts are a nicety; the ledger, imports, reports and payments are
+    # not. A missing matplotlib used to raise at import time and take the
+    # whole Accounting module down with it - every button did nothing.
+    Figure = FigureCanvasTkAgg = FuncFormatter = None
+    MATPLOTLIB_AVAILABLE = False
 
 from core.app_paths import get_assets_dir
 from core.bank_statement_parser import BankStatementParseError
@@ -194,6 +203,10 @@ def build_expense_donut_chart(parent, by_category):
     colors = DONUT_COLORS[:len(top)]
     total = sum(values)
 
+    if not MATPLOTLIB_AVAILABLE:
+        _empty_state(parent, "Charts are unavailable on this install.")
+        return
+
     fig = Figure(figsize=(4, 3.4), dpi=100)
     ax = fig.add_subplot(111)
     wedges, _ = ax.pie(
@@ -229,6 +242,10 @@ def build_monthly_trend_chart(parent, by_month):
     months = list(by_month.keys())
     income_vals = [by_month[m].get("Income", 0) / 100 for m in months]
     expense_vals = [by_month[m].get("Expense", 0) / 100 for m in months]
+
+    if not MATPLOTLIB_AVAILABLE:
+        _empty_state(parent, "Charts are unavailable on this install.")
+        return
 
     fig = Figure(figsize=(5.5, 3.4), dpi=100)
     ax = fig.add_subplot(111)
@@ -276,6 +293,10 @@ def build_category_breakdown_chart(parent, totals_minor, title, color):
     # room for text.
     labels = [label if len(label) <= 28 else label[:26] + "…" for label, _ in ordered]
     values = [amount / 100 for _, amount in ordered]
+
+    if not MATPLOTLIB_AVAILABLE:
+        _empty_state(parent, "Charts are unavailable on this install.")
+        return
 
     fig = Figure(figsize=(5.5, 3.8), dpi=100)
     ax = fig.add_subplot(111)
@@ -1162,20 +1183,31 @@ class LedgerWindow(ctk.CTkToplevel):
         if not key:
             return
 
+        # Every other row from this payee, whatever it is categorised as
+        # now. Her instruction: offer them all at once - a payee that
+        # needs splitting gets split in the KPI view, not here.
         similar = self.service.find_similar_transactions(
             transaction.description,
             exclude_id=transaction.id,
-            same_category_only=previous_category,
         )
 
         parent = self.winfo_toplevel()
 
         if similar:
+            # Name the categories being overwritten, so a mixed payee is
+            # never flattened without her seeing what she is losing.
+            current = {}
+            for item in similar:
+                label = item.category or "Uncategorized"
+                current[label] = current.get(label, 0) + 1
+            breakdown = ", ".join(
+                f"{count} x {label}" for label, count in sorted(current.items())
+            )
             if messagebox.askyesno(
                 "Apply to similar transactions?",
-                f"{len(similar)} other transaction(s) from \"{key}\" are still "
-                f"categorised as \"{previous_category or 'Uncategorized'}\".\n\n"
-                f"Change them to \"{new_category}\" as well?",
+                f'{len(similar)} other transaction(s) from "{key}".'
+                + "\n\n" + f"Currently: {breakdown}." + "\n\n"
+                + f'Change them all to "{new_category}"?',
                 parent=parent,
             ):
                 updated = self.service.bulk_update_category(

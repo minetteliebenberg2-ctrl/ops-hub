@@ -67,3 +67,46 @@ def matches_key(description, key):
 
 
 __all__ = ["merchant_key", "matches_key"]
+
+
+# Words the bank puts in front of, or behind, a real merchant name. A key
+# made of nothing but these identifies nobody and must never group rows.
+GENERIC_WORDS = {
+    "SEND", "PURCH", "PAYMENT", "PMT", "TRANSFER", "TRF", "EFT", "FNB",
+    "APP", "INTERNET", "FROM", "TO", "CR", "DR", "DEBIT", "CREDIT", "CARD",
+}
+
+# A one-word merchant must be this long before it is allowed to match
+# longer keys - "ML" should never sweep up everything starting with ML.
+MIN_SINGLE_WORD = 4
+
+
+def merchant_matches(first, second):
+    """True when two merchant keys name the same payee.
+
+    Exact equality is too strict for real statements: FNB appends a
+    different trailing word to almost every payment, so one merchant
+    arrives as "SEND JAMES WELDING", "SEND JAMES WELDING WELDING" and
+    "SEND JAMES WELDING NEW NUMBER". Those are one payee.
+
+    The rule is deliberately conservative - one key must be a whole-word
+    prefix of the other. "SPAR HOMESTEAD" and "SPAR THE PALMS" diverge at
+    the second word and stay apart, which is what she wants: those are
+    different shops.
+    """
+
+    if not first or not second:
+        return False
+    if first == second:
+        return True
+
+    short, long_ = sorted((first.split(), second.split()), key=len)
+    if long_[: len(short)] != short:
+        return False
+
+    # The shared part has to identify someone on its own.
+    if all(word in GENERIC_WORDS for word in short):
+        return False
+    if len(short) == 1 and len(short[0]) < MIN_SINGLE_WORD:
+        return False
+    return True
