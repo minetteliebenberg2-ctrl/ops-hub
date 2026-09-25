@@ -94,6 +94,31 @@ class QuoteDocumentRepository:
 
     # --------------------------------------------------
 
+    def set_dates(self, document_id, issue_date=None, due_date=None, actor=""):
+        """Correct an issued document's dates. The number and the amounts
+        are immutable - only the dates move, so a Pro-Forma raised today
+        for work invoiced in August can carry its real date and land in
+        the right place on the Statement. Pass None to leave one alone."""
+
+        fields, values = [], []
+        for column, value in (("issue_date", issue_date), ("due_date", due_date)):
+            if value is not None:
+                fields.append(f"{column} = ?")
+                values.append(value)
+        if not fields:
+            return self.get(document_id)
+
+        fields.append("updated_at = ?")
+        values.append(self._timestamp())
+        values.append(document_id)
+        with self.db.connect() as connection:
+            connection.execute(
+                f"UPDATE quote_documents SET {', '.join(fields)} WHERE id = ?", tuple(values),
+            )
+        return self.get(document_id)
+
+    # --------------------------------------------------
+
     def get(self, document_id):
 
         with self.db.connect() as connection:

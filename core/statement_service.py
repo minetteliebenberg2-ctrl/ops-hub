@@ -99,7 +99,7 @@ class StatementService:
             if period_start <= (line["date"] or "")[:10] <= period_end:
                 lines.append(line)
 
-        lines.sort(key=lambda l: l["date"] or "")
+        lines.sort(key=_statement_sort_key)
         return lines
 
     # --------------------------------------------------
@@ -120,3 +120,26 @@ class StatementService:
     def list_for_customer(self, customer_id):
 
         return self.repository.list_for_customer(customer_id)
+
+
+# Documents raised on the same day must still read in workflow order on the
+# statement: a Balance Invoice below the Deposit it deducts, never above it.
+_DESCRIPTION_ORDER = {
+    "Accepted Quote": 0,
+    "Pro-Forma": 1,
+    "Tax Invoice (Deposit)": 2,
+    "Tax Invoice": 3,
+    "Tax Invoice (Balance)": 4,
+}
+
+
+def _statement_sort_key(line):
+    """Date first, then workflow order, then document number - so the order
+    is chronological and, within one date, never arbitrary."""
+
+    description = line.get("description", "")
+    return (
+        (line.get("date") or "")[:10],
+        _DESCRIPTION_ORDER.get(description, 5),
+        line.get("ref") or "",
+    )

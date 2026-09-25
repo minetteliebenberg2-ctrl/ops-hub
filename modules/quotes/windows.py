@@ -27,7 +27,7 @@ from core.picklist_service import LINE_ITEM_TYPE, PicklistService
 from core.quote import format_quote_number
 from core.quote_document_service import QuoteDocumentService
 from core.quote_pdf import format_money, generate_quote_pdf
-from core.quote_service import QuoteService
+from core.quote_service import QuoteService, validate_document_date
 from core.statement_service import StatementService
 from gui.entity_table import build_entity_table
 from gui.flow_layout import reflow_widgets
@@ -338,6 +338,7 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         )
         self._tax_invoice_btn.pack(side="left", padx=4)
         ctk.CTkButton(doc_row, text="Statement", command=self.open_statement, width=110).pack(side="left", padx=4)
+        ctk.CTkButton(doc_row, text="Dates...", command=self.edit_dates, width=90).pack(side="left", padx=4)
 
 
         self._split_invoice_var = ctk.BooleanVar(value=False)
@@ -610,18 +611,29 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         quote = self.quote_service.get_quote(self.quote_id)
         if quote is None:
             return
-        if quote.status != "Draft":
-            messagebox.showinfo("Issue Quote", "Only a Draft quote can be issued.", parent=self)
+        # Draft is the normal path, but a quote that somehow reached another
+        # status without ever being numbered must still be issuable -
+        # otherwise it is stuck: no number, so no Pro-Forma and no invoice.
+        if quote.quote_number and quote.status != "Draft":
+            messagebox.showinfo(
+                "Issue Quote",
+                "This quote already has a number - it has been issued.",
+                parent=self,
+            )
             return
         prompt = (
             "Issue this revision? It keeps the same quote number as the original."
             if quote.revision_number
             else "Issue this quote? It will be assigned a permanent number."
         )
-        if not messagebox.askyesno("Issue Quote", prompt, parent=self):
+        issue_date = _ask_date(
+            self, "Issue Quote", prompt + "\n\nIssue date:",
+            quote.issue_date or date.today().strftime("%Y-%m-%d"),
+        )
+        if issue_date is None:
             return
         try:
-            self.quote_service.issue_quote(self.quote_id, current_actor())
+            self.quote_service.issue_quote(self.quote_id, current_actor(), issue_date=issue_date)
         except Exception as error:
             messagebox.showerror("Issue Quote", str(error), parent=self)
             return
@@ -655,10 +667,40 @@ class QuoteDetailWindow(ctk.CTkToplevel):
 
     def set_status(self, status):
 
-        self.quote_service.set_status(self.quote_id, status, current_actor())
+        try:
+            self.quote_service.set_status(self.quote_id, status, current_actor())
+        except ValueError as error:
+            # Accepting an un-issued quote is refused at the service. Offer
+            # the way out rather than leaving her at a dead end.
+            if status == "Accepted" and messagebox.askyesno(
+                "Mark Accepted", f"{error}\n\nIssue it now?", parent=self,
+            ):
+                self.issue_quote()
+                if self.quote_service.get_quote(self.quote_id).quote_number:
+                    self.quote_service.set_status(self.quote_id, status, current_actor())
+                else:
+                    return
+            else:
+                messagebox.showinfo("Mark Accepted", str(error), parent=self)
+                return
         if status == "Accepted":
             self.open_statement()
         self.refresh()
+
+    def edit_dates(self):
+        """One place for every date on this quote's chain - the quote's own
+        issue and accepted dates, then each Pro-Forma and Invoice. This is
+        what puts the Statement in the right order."""
+
+        quote = self.quote_service.get_quote(self.quote_id)
+        if quote is None:
+            return
+        QuoteDatesWindow(
+            self.winfo_toplevel(), quote_id=self.quote_id,
+            quote_service=self.quote_service,
+            quote_documents=self.quote_documents,
+            on_saved=self.refresh,
+        )
 
     def open_statement(self):
         quote = self.quote_service.get_quote(self.quote_id)
@@ -713,7 +755,7 @@ class QuoteDetailWindow(ctk.CTkToplevel):
 
         quote = self.quote_service.get_quote(self.quote_id)
         fields = [
-            {"key": "expiry_date", "label": "Valid Until (YYYY-MM-DD)", "kind": "text", "initial": quote.expiry_date},
+            {"key": "expiry_date", "label": "Valid Until", "kind": "date", "initial": quote.expiry_date},
             {"key": "notes", "label": "Notes (shown on the PDF)", "kind": "textarea", "initial": quote.notes},
         ]
         result = EntityFormDialog.ask(self, "Edit Quote Details", fields)
@@ -1022,8 +1064,13 @@ class QuoteDetailWindow(ctk.CTkToplevel):
 
     def _generate_document(self, generator, pdf_builder, label):
 
+        issue_date = _ask_date(
+            self, label, f"Date for this {label}:", date.today().strftime("%Y-%m-%d"),
+        )
+        if issue_date is None:
+            return
         try:
-            document = generator(self.quote_id, current_actor())
+            document = generator(self.quote_id, current_actor(), issue_date=issue_date)
         except Exception as error:
             messagebox.showerror(label, str(error), parent=self)
             return
@@ -1266,3 +1313,168 @@ class StatementEditorWindow(ctk.CTkToplevel):
             self, customer, f"{statement.document_number}.pdf".replace("/", "-"), build,
             title="Statement", heading=f"Statement {statement.document_number} saved",
         )
+
+
+# ==========================================================
+# Dates
+# ----------------------------------------------------------
+# Document dates used to be stamped "today" at generation and were then
+# immutable, so a chain captured in one sitting all carried one date and
+# the Statement could not read chronologically. These two let the real
+# dates be set - on generation, and afterwards.
+# ==========================================================
+
+
+def _ask_date(parent, title, prompt, initial):
+    """Small date prompt with the calendar picker. Returns an ISO date, or
+    None if she cancelled (so the caller does nothing at all)."""
+
+    dialog = _DatePromptDialog(parent.winfo_toplevel(), title, prompt, initial)
+    parent.wait_window(dialog)
+    return dialog.result
+
+
+class _DatePromptDialog(ctk.CTkToplevel):
+
+    def __init__(self, parent, title, prompt, initial):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("420x190")
+        self.resizable(False, False)
+        self.result = None
+
+        ctk.CTkLabel(self, text=prompt, justify="left", wraplength=380).pack(
+            padx=20, pady=(20, 10), anchor="w",
+        )
+        self.entry = DateEntry(self, value=initial)
+        self.entry.pack(padx=20, anchor="w")
+
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=16)
+        ctk.CTkButton(row, text="Cancel", width=90, command=self.destroy).pack(side="right")
+        ctk.CTkButton(row, text="OK", width=90, command=self._ok).pack(side="right", padx=8)
+
+        self.after(100, self._force_front)
+
+    def _force_front(self):
+        if not self.winfo_exists():
+            return
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after(200, lambda: self.winfo_exists() and self.attributes("-topmost", False))
+        self.focus_force()
+
+    def _ok(self):
+        value = self.entry.get()
+        try:
+            validate_document_date(value)
+        except ValueError as error:
+            messagebox.showerror(self.title(), str(error), parent=self)
+            return
+        self.result = value
+        self.destroy()
+
+
+class QuoteDatesWindow(ctk.CTkToplevel):
+    """Every date on one quote's chain, in one list: the quote's own issue
+    and accepted dates, then each Pro-Forma and Invoice in the order they
+    will print on the Statement. Numbers and amounts are never touched -
+    only the dates move."""
+
+    def __init__(self, parent, quote_id, quote_service, quote_documents, on_saved=None):
+        super().__init__(parent)
+        self.title("Dates")
+        self.geometry("620x520")
+
+        self.quote_id = quote_id
+        self.quote_service = quote_service
+        self.quote_documents = quote_documents
+        self.on_saved = on_saved
+        self._doc_entries = []
+
+        self._build_ui()
+        self.after(100, self._force_front)
+
+    def _force_front(self):
+        if not self.winfo_exists():
+            return
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after(200, lambda: self.winfo_exists() and self.attributes("-topmost", False))
+        self.focus_force()
+
+    def _build_ui(self):
+
+        quote = self.quote_service.get_quote(self.quote_id)
+        ctk.CTkLabel(
+            self, text="Dates on this quote and its documents",
+            font=("Segoe UI", 16, "bold"),
+        ).pack(anchor="w", padx=20, pady=(16, 2))
+        ctk.CTkLabel(
+            self,
+            text="The Statement reads in date order, so these are what put the\n"
+                 "chain in the right sequence. Numbers and amounts don't change.",
+            justify="left", text_color="#6B6B6B",
+        ).pack(anchor="w", padx=20, pady=(0, 12))
+
+        body = ctk.CTkScrollableFrame(self, height=320)
+        body.pack(fill="both", expand=True, padx=20)
+
+        quote_number = quote.quote_number if quote and quote.quote_number else "(not issued yet)"
+        self.issue_entry = self._row(body, quote_number, "Quote issued", quote.issue_date if quote else "")
+        self.accepted_entry = self._row(body, "", "Quote accepted", quote.accepted_date if quote else "")
+        self.expiry_entry = self._row(body, "", "Quote expires", quote.expiry_date if quote else "")
+
+        documents = sorted(
+            self.quote_documents.list_for_quote(self.quote_id),
+            key=lambda d: ((d.issue_date or "")[:10], d.document_number or ""),
+        )
+        for document in documents:
+            part = f" ({document.invoice_part.capitalize()})" if getattr(document, "invoice_part", "") else ""
+            entry = self._row(body, document.document_number, f"{document.doc_type}{part}", document.issue_date)
+            self._doc_entries.append((document, entry))
+
+        if not documents:
+            ctk.CTkLabel(
+                body, text="No Pro-Formas or Invoices generated from this quote yet.",
+                text_color="#6B6B6B",
+            ).pack(anchor="w", pady=8)
+
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=14)
+        ctk.CTkButton(row, text="Close", width=90, command=self.destroy).pack(side="right")
+        ctk.CTkButton(row, text="Save Dates", width=110, command=self._save).pack(side="right", padx=8)
+
+    def _row(self, parent, reference, label, value):
+
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.pack(fill="x", pady=3)
+        ctk.CTkLabel(frame, text=reference, width=150, anchor="w").pack(side="left")
+        ctk.CTkLabel(frame, text=label, width=190, anchor="w").pack(side="left")
+        entry = DateEntry(frame, value=(value or "")[:10])
+        entry.pack(side="left")
+        return entry
+
+    def _save(self):
+
+        try:
+            self.quote_service.set_quote_dates(
+                self.quote_id, current_actor(),
+                issue_date=self.issue_entry.get(),
+                accepted_date=self.accepted_entry.get(),
+                expiry_date=self.expiry_entry.get(),
+            )
+            for document, entry in self._doc_entries:
+                value = entry.get()
+                if value != (document.issue_date or "")[:10]:
+                    self.quote_documents.set_document_dates(
+                        document.id, issue_date=value, actor=current_actor(),
+                    )
+        except ValueError as error:
+            messagebox.showerror("Dates", str(error), parent=self)
+            return
+
+        messagebox.showinfo("Dates", "Dates saved.", parent=self)
+        if self.on_saved:
+            self.on_saved()
+        self.destroy()

@@ -15,6 +15,8 @@ from tkinter import messagebox, ttk
 
 import customtkinter as ctk
 
+from gui.components.date_picker import DateEntry
+
 
 class EntityFormDialog(ctk.CTkToplevel):
     """Generic create/edit form: renders text/dropdown/combo/checkbox/
@@ -85,6 +87,14 @@ class EntityFormDialog(ctk.CTkToplevel):
             widget = ctk.CTkCheckBox(parent, text="", variable=variable)
             widget.pack(anchor="w", pady=(2, 0))
             widget.variable = variable
+            return widget
+
+        if kind == "date":
+            # DateEntry carries the "..." calendar popup, so a date is
+            # picked rather than typed - typing it invited the format
+            # mistakes that silently drop a row out of date order.
+            widget = DateEntry(parent, value=initial or "")
+            widget.pack(anchor="w", pady=(2, 0))
             return widget
 
         if kind == "textarea":

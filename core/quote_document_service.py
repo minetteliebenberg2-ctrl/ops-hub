@@ -49,10 +49,10 @@ class QuoteDocumentService:
             return customer.customer_number.split("-")[0]
         return ""
 
-    def generate_pro_forma(self, quote_id, actor, notes=""):
+    def generate_pro_forma(self, quote_id, actor, notes="", issue_date=""):
 
         quote = self._require_issued_quote(quote_id)
-        issue_date = self._today()
+        issue_date = issue_date or self._today()
         cust_prefix = self._customer_prefix(quote.customer_id)
         prefix = f"{cust_prefix}-PF" if cust_prefix else "PF"
         return self.repository.generate(
@@ -63,11 +63,11 @@ class QuoteDocumentService:
 
     # --------------------------------------------------
 
-    def generate_tax_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS):
+    def generate_tax_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS, issue_date=""):
 
         quote = self._require_issued_quote(quote_id)
-        issue_date = self._today()
-        due_date = (datetime.now() + timedelta(days=due_days)).strftime("%Y-%m-%d")
+        issue_date = issue_date or self._today()
+        due_date = self._due_date(issue_date, due_days)
         cust_prefix = self._customer_prefix(quote.customer_id)
         prefix = f"{cust_prefix}-I" if cust_prefix else "I"
         return self.repository.generate(
@@ -99,18 +99,18 @@ class QuoteDocumentService:
             None,
         )
 
-    def generate_deposit_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS):
+    def generate_deposit_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS, issue_date=""):
         """Tax Invoice for the deposit portion: one line, own I_ number."""
 
         quote = self._require_issued_quote(quote_id)
         deposit, _balance = self.split_amounts(quote.total_minor)
         deposit_vat, _ = self.split_amounts(quote.vat_minor)
         return self._generate_invoice(
-            quote, actor, notes, due_days, DEPOSIT,
+            quote, actor, notes, due_days, DEPOSIT, issue_date=issue_date,
             subtotal_minor=deposit - deposit_vat, vat_minor=deposit_vat, total_minor=deposit,
         )
 
-    def generate_balance_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS):
+    def generate_balance_invoice(self, quote_id, actor, notes="", due_days=DEFAULT_INVOICE_DUE_DAYS, issue_date=""):
         """Tax Invoice for the balance portion. Needs the deposit invoice first."""
 
         quote = self._require_issued_quote(quote_id)
@@ -122,14 +122,14 @@ class QuoteDocumentService:
         deposit_vat, _ = self.split_amounts(quote.vat_minor)
         balance_vat = quote.vat_minor - deposit_vat
         return self._generate_invoice(
-            quote, actor, notes, due_days, BALANCE,
+            quote, actor, notes, due_days, BALANCE, issue_date=issue_date,
             subtotal_minor=balance - balance_vat, vat_minor=balance_vat, total_minor=balance,
         )
 
-    def _generate_invoice(self, quote, actor, notes, due_days, invoice_part, **amounts):
+    def _generate_invoice(self, quote, actor, notes, due_days, invoice_part, issue_date="", **amounts):
 
-        issue_date = self._today()
-        due_date = (datetime.now() + timedelta(days=due_days)).strftime("%Y-%m-%d")
+        issue_date = issue_date or self._today()
+        due_date = self._due_date(issue_date, due_days)
         cust_prefix = self._customer_prefix(quote.customer_id)
         prefix = f"{cust_prefix}-I" if cust_prefix else "I"
         return self.repository.generate(
@@ -170,3 +170,38 @@ class QuoteDocumentService:
     def _today(self):
 
         return datetime.now().strftime("%Y-%m-%d")
+
+    # --------------------------------------------------
+
+    def _due_date(self, issue_date, due_days):
+        """Payment terms run from the document's own issue date, not from
+        today - a back-dated invoice must not come out already overdue by
+        the number of days it was captured late."""
+
+        try:
+            start = datetime.strptime(issue_date[:10], "%Y-%m-%d")
+        except (TypeError, ValueError):
+            start = datetime.now()
+        return (start + timedelta(days=due_days)).strftime("%Y-%m-%d")
+
+    # --------------------------------------------------
+
+    def set_document_dates(self, document_id, issue_date=None, due_date=None, actor=""):
+        """Move an existing document's dates. Number and amounts untouched."""
+
+        for value in (issue_date, due_date):
+            if value:
+                self._validate_date(value)
+        return self.repository.set_dates(
+            document_id, issue_date=issue_date, due_date=due_date, actor=actor,
+        )
+
+    # --------------------------------------------------
+
+    @staticmethod
+    def _validate_date(value):
+
+        try:
+            datetime.strptime(value[:10], "%Y-%m-%d")
+        except (TypeError, ValueError):
+            raise ValueError(f"'{value}' is not a date. Use YYYY-MM-DD, for example 2026-08-14.")

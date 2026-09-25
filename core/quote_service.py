@@ -26,6 +26,17 @@ from core.quote_repository import QuoteLineItemRepository, QuoteRepository
 DEFAULT_VALIDITY_DAYS = 7
 
 
+def validate_document_date(value):
+    """YYYY-MM-DD or nothing. Dates are typed by hand on the date-editing
+    dialogs, and a bad one would silently exclude the document from every
+    statement period rather than raising."""
+
+    try:
+        datetime.strptime(str(value)[:10], "%Y-%m-%d")
+    except (TypeError, ValueError):
+        raise ValueError(f"'{value}' is not a date. Use YYYY-MM-DD, for example 2026-08-14.")
+
+
 class QuoteService:
 
     def __init__(
@@ -126,7 +137,7 @@ class QuoteService:
 
     # --------------------------------------------------
 
-    def issue_quote(self, quote_id, actor, validity_days=DEFAULT_VALIDITY_DAYS):
+    def issue_quote(self, quote_id, actor, validity_days=DEFAULT_VALIDITY_DAYS, issue_date=""):
 
         quote = self.quotes.get(quote_id)
         if quote is None:
@@ -134,8 +145,11 @@ class QuoteService:
         if not self.line_items.list_for_quote(quote_id):
             raise ValueError("Add at least one line item before issuing a quote.")
 
-        issue_date = datetime.now().date().isoformat()
-        expiry_date = (datetime.now() + timedelta(days=validity_days)).date().isoformat()
+        issue_date = issue_date or datetime.now().date().isoformat()
+        validate_document_date(issue_date)
+        expiry_date = (
+            datetime.strptime(issue_date[:10], "%Y-%m-%d") + timedelta(days=validity_days)
+        ).date().isoformat()
 
         return self.quotes.issue(quote_id, issue_date, expiry_date, actor)
 
@@ -152,8 +166,36 @@ class QuoteService:
     # --------------------------------------------------
 
     def set_status(self, quote_id, status, actor):
+        """A quote cannot be Accepted before it has been issued. Allowing it
+        created a dead end (2026-09-25, Cavaleros): the quote sat Accepted
+        with no number, so Issue Quote refused it as "not a Draft" and every
+        invoice refused it as "not issued"."""
 
+        if status == "Accepted":
+            quote = self.quotes.get(quote_id)
+            if quote is None:
+                raise ValueError("Quote not found.")
+            if not quote.quote_number:
+                raise ValueError(
+                    "Issue this quote before marking it Accepted - it has no quote number yet."
+                )
         self.quotes.set_status(quote_id, status, actor)
+
+    # --------------------------------------------------
+
+    def set_quote_dates(self, quote_id, actor, issue_date=None, accepted_date=None, expiry_date=None):
+        """Correct a quote's own dates so it sits in the right place on the
+        Statement. Validated, because a typo here silently drops the quote
+        out of every statement period."""
+
+        for value in (issue_date, accepted_date, expiry_date):
+            if value:
+                validate_document_date(value)
+        self.quotes.set_dates(
+            quote_id, actor, issue_date=issue_date,
+            accepted_date=accepted_date, expiry_date=expiry_date,
+        )
+        return self.quotes.get(quote_id)
 
     # --------------------------------------------------
 

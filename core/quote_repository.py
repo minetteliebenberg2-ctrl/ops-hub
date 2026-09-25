@@ -286,6 +286,32 @@ class QuoteRepository:
 
     # --------------------------------------------------
 
+    def set_dates(self, quote_id, actor, issue_date=None, accepted_date=None, expiry_date=None):
+        """Correct a quote's own dates after the fact. A quote captured
+        weeks after it really went out would otherwise carry today's date
+        and sit in the wrong place on the Statement. Pass None to leave a
+        field alone; pass "" to clear it."""
+
+        fields, values = [], []
+        for column, value in (("issue_date", issue_date),
+                              ("accepted_date", accepted_date),
+                              ("expiry_date", expiry_date)):
+            if value is not None:
+                fields.append(f"{column} = ?")
+                values.append(value)
+        if not fields:
+            return
+
+        now = self._timestamp()
+        fields.extend(["updated_at = ?", "updated_by = ?"])
+        values.extend([now, actor, quote_id])
+        with self.db.connect() as connection:
+            connection.execute(
+                f"UPDATE quotes SET {', '.join(fields)} WHERE id = ?", tuple(values),
+            )
+
+    # --------------------------------------------------
+
     def archive(self, quote_id, actor, reason):
 
         with self.db.connect() as connection:
