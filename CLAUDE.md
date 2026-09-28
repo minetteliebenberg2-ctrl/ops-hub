@@ -241,7 +241,21 @@ Baseline was 649 passed; the +12 are the ported studio tests.
 ` inside the module blurb** and broke the file at import, caught
 by the window smoke rather than by any test. Same escape trap as the FC Hub backup path.
 
-**Left for her:** test it in the Ops Hub exe, which has not been rebuilt yet.
+**A smoke test wrote to the live `app.db`, and the DB-copy recipe is the reason.**
+Patching `core.database.DATABASE_PATH` is **not** enough. `BusinessSettingsRepository`
+(and anything else defaulting to `db or database`) binds to the **module-level
+`database` singleton**, which was already constructed at import time against the real
+path - so the patch missed it and a brand() smoke test saved a test trading name, phone
+and website into the live business settings. Patch `core.database.database.path` as well,
+or pass an explicit `Database(copy_path)` into the repository.
+
+The live row is a single row created 2026-08-23 that was **entirely blank** before the
+write, so nothing real was lost; the fields now read "Test Trading Co" /
+"011 000 0000" / "testtrading.co.za". Reverting it was refused as a shared-resource
+write, so it is hers to clear in **Settings -> Business Settings**.
+
+**Left for her:** test it in the Ops Hub exe (rebuilt 2026-09-28 11:41, 81,339,406 bytes,
+clean build, launches clean), and clear or correct Business Settings.
 
 ---
 
