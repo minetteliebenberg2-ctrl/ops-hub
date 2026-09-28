@@ -86,59 +86,52 @@ class MainWindow:
         """Build sidebar navigation from module registry."""
         modules = self.manager.list_modules()
 
-        # Group modules by category
-        sections = {
-            "Main": [],
-            "Operations": [],
-            "Finance": [],
-            "Tools": [],
-        }
-
-        # Categorize modules
-        main_modules = [
-            "dashboard",
-            "customers",
-            "crm",
-            "projects",
-            "measurements",
-            "quotes",
-            "jobs",
-        ]
-        operations_modules = [
-            "schedule",
-            "site_visit",
-            "communications",
-            "documents",
-            "gallery",
-            "proposals",
-        ]
-        finance_modules = [
-            "invoices",
-            "expenses",
-            "payments",
-            "accounting",
-            "reports",
-        ]
-        tools_modules = [
-            "settings",
+        # Group modules by category — order here is sidebar order.
+        # Modules not in any list land in Tools (the last group).
+        _GROUPS = [
+            ("Main", [
+                "dashboard", "crm", "quotes", "projects",
+            ]),
+            ("Operations", [
+                "calendar", "gallery", "proposals",
+                "communications",
+            ]),
+            ("Finance", [
+                "accounting", "job_costing", "accounting_workbook",
+            ]),
+            ("Documents", [
+                "documents", "annual_compliance",
+            ]),
+            ("Tools", [
+                "social_media", "backup", "settings",
+                "troubleshooter",
+            ]),
+            ("File Tools", [
+                "batch_renamer", "duplicate_finder", "file_mover",
+                "empty_folder_remover",
+            ]),
         ]
 
-        # Assign modules to sections
+        # Build a module_id -> group lookup; anything unlisted → Tools
+        _group_for = {}
+        for group_name, ids in _GROUPS:
+            for mid in ids:
+                _group_for[mid] = group_name
+
+        sections = {name: [] for name, _ in _GROUPS}
+
         for module in modules:
             if not module.info.enabled:
                 continue
-
             module_id = module.info.module_id
             label = module.info.name
+            group = _group_for.get(module_id, "Tools")
+            sections[group].append((module_id, label, module))
 
-            if module_id in main_modules:
-                sections["Main"].append((module_id, label, module))
-            elif module_id in operations_modules:
-                sections["Operations"].append((module_id, label, module))
-            elif module_id in finance_modules:
-                sections["Finance"].append((module_id, label, module))
-            else:
-                sections["Tools"].append((module_id, label, module))
+        # Sort each group by the order defined in _GROUPS
+        for group_name, ids in _GROUPS:
+            order = {mid: i for i, mid in enumerate(ids)}
+            sections[group_name].sort(key=lambda t: order.get(t[0], 999))
 
         # Build sidebar
         for section_name, modules_list in sections.items():
