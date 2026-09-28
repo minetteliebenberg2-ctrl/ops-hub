@@ -209,6 +209,43 @@ class should NOT be a nav module, put it in an existing module's `windows.py`.
 
 **Rule: update this section before ending every session. Next Claude reads this first.**
 
+### 2026-09-28 - Social Media poster studio ported from FC Hub
+
+**UNCOMMITTED - she has not tested the Ops Hub exe. No migration, no spec change.**
+
+Ported `core/social_studio.py`, `assets/social_studio/`, `modules/social_media/` and
+`tests/test_social_studio.py` from FC Hub. Icon added to both ICON_MAPs
+(`sidebar.py` `"social_media"`, `module_nav.py` `"Share"`). `Ops Hub.spec` untouched -
+`('assets', 'assets')` already bundles the studio files, and there is no migration.
+
+**Made generic, per the 2026-09-22 de-branding.** Nothing FacilitiesCo survives the port:
+
+- New `brand()` in `core/social_studio.py` reads trading name, phone and website from
+  **Settings -> Business Settings** and serves them on a new `/api/brand` route. The page
+  no longer hardcodes a phone, site or handle, and any blank field is simply not drawn,
+  so an empty Business Settings gives a clean footer bar rather than a broken one.
+- Logo is `assets/logo_placeholder.png`, not the FacilitiesCo mark.
+- The `@facilitiesco on TikTok` button is gone; Meta Business Suite and the TikTok
+  upload page stay, since both are generic.
+
+**Proved, not assumed.** Both states rendered in a browser against a **copy** of
+`app.db`: with settings blank the footer bar draws empty; with a test name, phone and
+site filled in, the footer carries the phone and the site and the page title becomes
+"<name> - Poster Studio". All seven routes 200, path traversal refused 403.
+**21/21** module windows build clean (the studio page is the 21st).
+`pytest tests -q` -> **661 passed, 1 skipped, 1 failed** - the failure is only the
+documented pre-existing `test_troubleshooter.py::test_report_contains_required_fields_and_unicode`.
+Baseline was 649 passed; the +12 are the ported studio tests.
+
+**A heredoc mangled a `
+` inside the module blurb** and broke the file at import, caught
+by the window smoke rather than by any test. Same escape trap as the FC Hub backup path.
+
+**Left for her:** test it in the Ops Hub exe, which has not been rebuilt yet.
+
+---
+
+
 ### 2026-09-11 — sync from FC Hub + daily backup
 
 **What was done:**

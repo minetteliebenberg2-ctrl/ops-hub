@@ -39,6 +39,7 @@ ICON_MAP = {
     "empty_folder_remover": "🗑️",
     "troubleshooter": "🛠️",
     "job_costing": "📈",
+    "social_media": "📣",
 }
 
 

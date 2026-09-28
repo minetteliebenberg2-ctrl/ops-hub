@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Poster Studio</title>
+<link rel="stylesheet" href="/static/archivo.css">
+<link rel="stylesheet" href="/static/studio.css">
+</head>
+<body>
+
+<div id="app">
+
+  <aside id="rail">
+    <h1>Poster studio</h1>
+
+    <p class="rail-label">Size</p>
+    <div class="pickers" id="sizes"></div>
+
+    <p class="rail-label">Layout</p>
+    <div class="pickers" id="layouts"></div>
+
+    <p class="rail-label">Text</p>
+    <div id="fields"></div>
+
+    <p class="rail-label">Branding</p>
+    <label class="tick"><input type="checkbox" id="opt-logo" checked> Show logo</label>
+    <label class="tick"><input type="checkbox" id="opt-footer" checked> Show footer bar</label>
+
+    <p class="rail-label">Save</p>
+    <input type="text" id="filename" placeholder="File name">
+    <button class="primary" id="btn-save">Save PNG</button>
+    <p class="saved" id="saved"></p>
+
+    <p class="rail-label">Then post it</p>
+    <button id="btn-folder">Open folder</button>
+    <button id="btn-meta">Meta Business Suite</button>
+    <button id="btn-tiktok">TikTok upload</button>
+    <p class="note">Facebook and Instagram schedule together in Meta Business Suite. Neither allows posting straight from a desktop app.</p>
+  </aside>
+
+  <main id="stage">
+    <div id="canvas-wrap"><canvas id="poster"></canvas></div>
+    <p class="hint" id="hint">Click a photo slot to choose a picture. Click any text to edit it.</p>
+  </main>
+</div>
+
+<div id="chooser" class="hidden">
+  <div class="chooser-box">
+    <div class="chooser-head">
+      <strong id="chooser-title">Choose a photo</strong>
+      <span>
+        <button id="btn-browse">Browse my files</button>
+        <button id="btn-clear">Clear slot</button>
+        <button id="chooser-close">Close</button>
+      </span>
+    </div>
+    <input type="text" id="gallery-search" placeholder="Filter by client, album or caption">
+    <div id="gallery-grid"></div>
+    <p class="note" id="gallery-empty"></p>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept="image/*" class="hidden">
+
+<script src="/static/studio.js"></script>
+</body>
+</html>
