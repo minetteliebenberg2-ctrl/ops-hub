@@ -35,8 +35,11 @@ class JobCardService:
     # --------------------------------------------------
 
     def create_job_card_from_quote(self, customer, site_id, actor, purchase_order="",
-                                    quote_number="", bill_to="", accepted_date=""):
-        """Create a job card from an accepted quote. site_id may be empty."""
+                                    quote_number="", bill_to="", accepted_date="",
+                                    quote_total_minor=0):
+        """Create a job card from an accepted quote. site_id may be empty.
+        If quote_total_minor > 0, auto-creates an Income allocation so the
+        revenue shows immediately in Job Costing."""
 
         job_card = self.job_cards.create(customer.id, site_id or "", actor)
         job_card.purchase_order = purchase_order
@@ -47,7 +50,25 @@ class JobCardService:
         if accepted_date:
             notes_parts.append(f"Accepted: {accepted_date}")
         job_card.notes = "\n".join(notes_parts)
-        return self.job_cards.save(job_card, actor)
+        saved = self.job_cards.save(job_card, actor)
+
+        if quote_total_minor > 0:
+            from core.job_cost_allocation import (
+                JobCostAllocation, JobCostAllocationRepository, INCOME,
+            )
+            from core.database import database
+            alloc_repo = JobCostAllocationRepository(db=database)
+            alloc = JobCostAllocation(
+                job_card_id=saved.id,
+                allocation_type=INCOME,
+                description=f"Quote {quote_number}" if quote_number else "Accepted quote",
+                amount_minor=quote_total_minor,
+                date=accepted_date or saved.created_at[:10],
+                notes="Auto-created from accepted quote",
+            )
+            alloc_repo.save(alloc, actor=actor)
+
+        return saved
 
     # --------------------------------------------------
 

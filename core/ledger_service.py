@@ -104,6 +104,8 @@ TRANSFER_LIKE_CATEGORIES = {
     "Pharmacy",
     "Local Shop",
     "Loan repayment",
+    "Director's Loan to Company",
+    "Director's Loan Repayment",
 }
 
 # Auto-categorization rules for bank-statement imports.
@@ -780,6 +782,15 @@ class LedgerService:
     # --------------------------------------------------
     # Reporting
     # --------------------------------------------------
+
+    def default_business_account(self):
+        accounts = self.repository.list_accounts()
+        if not accounts:
+            return None
+        for name in accounts:
+            if "business" in name.lower():
+                return name
+        return accounts[0]
 
     def get_summary(self, date_from=None, date_to=None, account=None):
 

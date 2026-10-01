@@ -35,7 +35,8 @@ def install():
 
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        self.after(50, lambda: _bring_to_front(self))
+        self.after(150, lambda: _bring_to_front(self))
+        self.after(350, lambda: _bring_to_front(self))
 
     ctk.CTkToplevel.__init__ = patched_init
 

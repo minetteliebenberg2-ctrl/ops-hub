@@ -34,7 +34,7 @@ except ImportError:  # pragma: no cover - only hit on an incomplete install
 from core.app_paths import get_assets_dir
 from core.bank_statement_parser import BankStatementParseError
 from core.crm_service import CRMService
-from core.ledger_service import EXPENSE_CATEGORIES, INCOME_CATEGORIES, LedgerService
+from core.ledger_service import EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_LIKE_CATEGORIES, LedgerService
 from core.merchant_key import merchant_key
 from core.ledger_transaction import EXPENSE, INCOME
 from core.payment_service import PaymentService
@@ -513,18 +513,13 @@ class DashboardWindow(ctk.CTkToplevel):
         self.title("Accounting Dashboard")
         self.geometry("1400x750")
         self.configure(fg_color=THEME_DARK_GREY)
-        self.transient(parent)
 
-        # Belt-and-braces on top of the site-wide gui/window_focus.py
-        # fix - a crash partway through building this window's UI was
-        # interrupting that fix's timing and leaving the window stuck
-        # behind its parent. The crash is fixed too, but this stays as
-        # a safety net.
         self.lift()
         self.focus_force()
         self.after(50, lambda: (self.lift(), self.focus_force()))
 
         self.service = LedgerService()
+        self._default_account = self.service.default_business_account()
         self.metric_cards = {}
         self.chart_frame = None
         self.recent_table = None
@@ -548,6 +543,15 @@ class DashboardWindow(ctk.CTkToplevel):
             fg_color=BRAND_GREEN, hover_color=COLORS["accent_hover"], text_color="#FFFFFF",
         ).pack(side="right", padx=4)
         ctk.CTkButton(header_row, text="Add Transaction", command=self.add_transaction, width=140).pack(side="right", padx=4)
+
+        accounts = ["All Accounts"] + self.service.list_accounts()
+        self._account_var = ctk.StringVar(value=self._default_account or "All Accounts")
+        self._account_menu = ttk.Combobox(
+            header_row, textvariable=self._account_var, values=accounts,
+            state="readonly", width=22,
+        )
+        self._account_menu.bind("<<ComboboxSelected>>", lambda _e: self.refresh())
+        self._account_menu.pack(side="right", padx=4)
 
         metrics_frame = ctk.CTkFrame(main_frame, fg_color=THEME_DARK_GREY)
         metrics_frame.pack(fill="x", pady=(0, 15))
@@ -617,7 +621,10 @@ class DashboardWindow(ctk.CTkToplevel):
 
     def refresh(self):
 
-        summary = self.service.get_summary()
+        acct = self._account_var.get() if hasattr(self, "_account_var") else None
+        if acct == "All Accounts":
+            acct = None
+        summary = self.service.get_summary(account=acct)
 
         self.metric_cards["income"].value_label.configure(text=format_money(summary["total_income_minor"]))
         self.metric_cards["expenses"].value_label.configure(text=format_money(summary["total_expenses_minor"]))
@@ -641,7 +648,10 @@ class DashboardWindow(ctk.CTkToplevel):
         build_monthly_trend_chart(self.chart_frame, summary["by_month"])
 
         self.recent_table.delete(*self.recent_table.get_children())
-        for transaction in self.service.list_transactions()[:20]:
+        filters = {}
+        if acct:
+            filters["account"] = acct
+        for transaction in self.service.list_transactions(filters)[:20]:
             self.recent_table.insert(
                 "", "end", iid=transaction.id, text=transaction.date,
                 values=(
@@ -682,6 +692,7 @@ class LedgerWindow(ctk.CTkToplevel):
         self.configure(fg_color=THEME_DARK_GREY)
 
         self.service = LedgerService()
+        self._default_account = self.service.default_business_account()
         self._all_accounts = ["All Accounts"]
         self._all_categories = ["All Categories"]
         self._all_months = ["All Months"]
@@ -727,7 +738,7 @@ class LedgerWindow(ctk.CTkToplevel):
         # 45 real categories that made most of the list unreachable
         # and looked like categories had gone missing. ttk.Combobox's
         # native dropdown scrolls correctly and needs no workaround.
-        self.account_var = ctk.StringVar(value="All Accounts")
+        self.account_var = ctk.StringVar(value=self._default_account or "All Accounts")
         self.account_menu = ttk.Combobox(
             filter_frame, textvariable=self.account_var, values=self._all_accounts,
             state="readonly", width=22,
@@ -755,6 +766,14 @@ class LedgerWindow(ctk.CTkToplevel):
             filter_frame, text="Sort: Date", command=self._toggle_sort, width=110,
         )
         self.sort_cat_btn.pack(side="left", padx=5)
+
+        self.exclude_transfers_var = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            filter_frame, text="Exclude Transfers",
+            variable=self.exclude_transfers_var,
+            command=self.refresh,
+            font=("Segoe UI", 10),
+        ).pack(side="left", padx=10)
 
         ctk.CTkButton(
             filter_frame, text="Undo Last Edit", command=self.undo_last_edit, width=130,
@@ -829,6 +848,9 @@ class LedgerWindow(ctk.CTkToplevel):
             filters["category"] = self.category_var.get()
 
         transactions = list(self.service.list_transactions(filters))
+
+        if hasattr(self, "exclude_transfers_var") and self.exclude_transfers_var.get():
+            transactions = [t for t in transactions if t.category not in TRANSFER_LIKE_CATEGORIES]
 
         # Build month list from all loaded transactions (before month filter)
         months_seen = sorted({t.date[:7] for t in transactions}, reverse=True)
@@ -994,9 +1016,12 @@ class LedgerWindow(ctk.CTkToplevel):
 
     def export_to_excel(self):
 
+        import os
+        desktop = os.path.join(os.path.expanduser("~"), "Desktop")
         filename = filedialog.asksaveasfilename(
             title="Export Ledger to Excel", defaultextension=".xlsx",
             filetypes=[("Excel Workbook", "*.xlsx")], initialfile="ledger_export.xlsx",
+            initialdir=desktop,
         )
         if not filename:
             return
@@ -2444,12 +2469,28 @@ class AccountingModuleWindow(ctk.CTkFrame):
         self.configure(fg_color=THEME_DARK_GREY)
         self.hub = None
 
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=20, pady=(20, 30))
+
         ctk.CTkLabel(
-            self,
+            header,
             text="Accounting Hub",
             font=("Segoe UI", 22, "bold"),
             text_color=THEME_TEXT_PRIMARY,
-        ).pack(pady=(20, 30))
+        ).pack(side="left", padx=(20, 0))
+
+        ctk.CTkButton(
+            header,
+            text="⛶  Full screen",
+            font=("Segoe UI", 11),
+            fg_color="transparent",
+            text_color=THEME_TEXT_SECONDARY,
+            hover_color=THEME_SURFACE,
+            width=110,
+            height=32,
+            border_width=0,
+            command=lambda: __import__("gui.window_state", fromlist=["maximise"]).maximise(self.winfo_toplevel()),
+        ).pack(side="right", padx=(0, 20))
 
         info_frame = ctk.CTkFrame(self, fg_color=THEME_SURFACE)
         info_frame.pack(pady=20, padx=40, fill="both", expand=True)

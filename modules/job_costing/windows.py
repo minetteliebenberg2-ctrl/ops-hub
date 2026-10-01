@@ -29,6 +29,8 @@ class JobCostingModuleWindow(ctk.CTkFrame):
         top = ctk.CTkFrame(self)
         top.pack(fill="x", padx=10, pady=(10, 5))
         ctk.CTkLabel(top, text="Job Costing", font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
+        ctk.CTkButton(top, text="Archive Job", width=100, fg_color="#CC3333",
+                       command=self._archive_selected).pack(side="right", padx=5)
         ctk.CTkButton(top, text="Refresh", width=80, command=self._refresh_jobs).pack(side="right", padx=5)
         ctk.CTkButton(top, text="+ New Job", width=100, command=self._new_job).pack(side="right", padx=5)
 
@@ -112,6 +114,24 @@ class JobCostingModuleWindow(ctk.CTkFrame):
             self.winfo_toplevel(), self.job_card_repo, self.customer_repo,
             on_saved=self._refresh_jobs,
         )
+
+    def _archive_selected(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("Archive Job", "Select a job first.", parent=self)
+            return
+        job_id = sel[0]
+        job = self.job_card_repo.get(job_id)
+        if not job:
+            return
+        if not messagebox.askyesno(
+            "Archive Job",
+            f"Archive {job.job_card_number}?\n\nIt will be removed from this list.",
+            parent=self,
+        ):
+            return
+        self.job_card_repo.archive(job_id, "minette", "Archived from Job Costing")
+        self._refresh_jobs()
 
     def _on_job_double_click(self, event):
         sel = self.tree.selection()
