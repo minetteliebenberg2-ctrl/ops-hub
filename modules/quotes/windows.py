@@ -397,8 +397,9 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         site = self.crm_service.sites.get(quote.site_id) if quote.site_id else None
 
         display_number = format_quote_number(quote)
+        rev_tag = f"  (Rev {quote.revision_number})" if quote.revision_number else ""
         self.title(f"Quote — {display_number if quote.quote_number else 'Draft'}")
-        self.header_label.configure(text=f"{display_number if quote.quote_number else 'Draft Quote'}  ({quote.status})")
+        self.header_label.configure(text=f"{display_number if quote.quote_number else 'Draft Quote'}  ({quote.status}){rev_tag}")
         subheader = f"{customer.name if customer else 'Unknown customer'}"
         if site:
             subheader += f"  ·  {site.name}"
@@ -1003,7 +1004,10 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         # An unnumbered draft always files as Draft_Quote.pdf and
         # replaces the previous draft - her call, to keep Paperwork
         # tidy rather than accumulating a draft per attempt.
-        default_name = f"{format_quote_number(quote) if quote.quote_number else 'Draft_Quote'}.pdf".replace("/", "-").replace(" ", "_").replace("(", "").replace(")", "")
+        base = format_quote_number(quote) if quote.quote_number else "Draft_Quote"
+        if quote.revision_number:
+            base += f" Rev {quote.revision_number}"
+        default_name = f"{base}.pdf".replace("/", "-").replace(" ", "_")
 
         contacts = self.crm_service.list_contacts(quote.customer_id)
         primary = next((c for c in contacts if c.is_primary), contacts[0] if contacts else None)

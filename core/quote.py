@@ -51,13 +51,8 @@ class Quote:
 
 
 def format_quote_number(quote):
-    """Human-facing quote number, e.g. 'Q_26/001' for the original or
-    'Q_26/001 (Rev 1)' for a revision. Revisions share the original's
-    immutable number rather than drawing a new one - a changed quote
-    is a new version of the same document, not a different document."""
+    """Client-facing quote number — always clean, never shows revision."""
 
     if not quote.quote_number:
         return "DRAFT"
-    if quote.revision_number:
-        return f"{quote.quote_number} (Rev {quote.revision_number})"
     return quote.quote_number

@@ -26,6 +26,22 @@ from core.quote_repository import QuoteLineItemRepository, QuoteRepository
 DEFAULT_VALIDITY_DAYS = 7
 
 
+def _latest_revisions_only(quotes):
+    """Keep only the highest revision_number per (customer_id, quote_number).
+    Drafts (no quote_number) are always kept."""
+    best = {}
+    drafts = []
+    for q in quotes:
+        if not q.quote_number:
+            drafts.append(q)
+            continue
+        key = (q.customer_id, q.quote_number)
+        existing = best.get(key)
+        if existing is None or q.revision_number > existing.revision_number:
+            best[key] = q
+    return drafts + sorted(best.values(), key=lambda q: q.created_at, reverse=True)
+
+
 def validate_document_date(value):
     """YYYY-MM-DD or nothing. Dates are typed by hand on the date-editing
     dialogs, and a bad one would silently exclude the document from every
@@ -129,11 +145,15 @@ class QuoteService:
 
     # --------------------------------------------------
 
-    def list_quotes(self, customer_id=None):
+    def list_quotes(self, customer_id=None, include_superseded=False):
 
         if customer_id:
-            return self.quotes.list_for_customer(customer_id)
-        return self.quotes.list_all()
+            all_quotes = self.quotes.list_for_customer(customer_id)
+        else:
+            all_quotes = self.quotes.list_all()
+        if include_superseded:
+            return all_quotes
+        return _latest_revisions_only(all_quotes)
 
     # --------------------------------------------------
 
