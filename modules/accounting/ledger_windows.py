@@ -2244,6 +2244,14 @@ class BankImportWindow(ctk.CTkToplevel):
             messagebox.showerror("Import Bank Statement", f"Import failed: {error}", parent=self)
             return
 
+        if result.get("error"):
+            messagebox.showerror(
+                "Import Blocked",
+                result["error"],
+                parent=self,
+            )
+            return
+
         messagebox.showinfo(
             "Import Bank Statement",
             f"Imported {result['imported']} new transaction(s) into \"{result['account']}\".\n"

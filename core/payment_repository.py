@@ -103,6 +103,13 @@ class PaymentRepository:
 
     # --------------------------------------------------
 
+    def delete(self, payment_id):
+
+        with self.db.connect() as connection:
+            connection.execute("DELETE FROM payments WHERE id = ?", (payment_id,))
+
+    # --------------------------------------------------
+
     def _to_payment(self, row):
 
         return Payment(

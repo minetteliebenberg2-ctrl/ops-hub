@@ -97,7 +97,7 @@ class MainWindow:
                 "communications",
             ]),
             ("Finance", [
-                "accounting", "job_costing", "accounting_workbook",
+                "accounting", "money_owing", "job_costing", "accounting_workbook",
             ]),
             ("Documents", [
                 "documents", "annual_compliance",

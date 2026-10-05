@@ -168,12 +168,49 @@ class LedgerService:
     # Bank statement import
     # --------------------------------------------------
 
+    def _cross_account_guard(self, parsed_keys, target_account, batch_name):
+        """Refuse an import when the same rows already exist under a
+        different account, or when the same batch file was already
+        imported under a different account.  Returns an error string
+        if the import should be blocked, or None if it's safe."""
+
+        with self.repository.db.connect() as conn:
+            row = conn.execute(
+                "SELECT DISTINCT account FROM ledger_transactions "
+                "WHERE import_batch = ? AND account != ?",
+                (batch_name, target_account),
+            ).fetchone()
+            if row:
+                return (
+                    f"This file ({batch_name}) was already imported under "
+                    f"'{row[0]}'. Importing it again under '{target_account}' "
+                    f"would create duplicates."
+                )
+
+            other_accounts = conn.execute(
+                "SELECT DISTINCT account FROM ledger_transactions "
+                "WHERE account != ?",
+                (target_account,),
+            ).fetchall()
+
+        for (other_acct,) in other_accounts:
+            other_rows = self.repository.list_for_account(other_acct)
+            other_counts = Counter(
+                (r.date, r.amount_minor, r.description) for r in other_rows
+            )
+            cross_hits = sum(1 for k in parsed_keys if other_counts[k] > 0)
+            if cross_hits > len(parsed_keys) * 0.5:
+                return (
+                    f"{cross_hits} of {len(parsed_keys)} rows already exist "
+                    f"in '{other_acct}'. This looks like a duplicate import "
+                    f"under the wrong account."
+                )
+        return None
+
     def import_bank_statement(self, filepath, actor, account_override=""):
-        """Parses an FNB CSV export and inserts new rows only - rows
-        already present for that account (matched on date + amount +
-        description, counted rather than uniqued so genuinely repeated
-        same-day transactions aren't wrongly skipped) are left alone, so
-        re-importing an overlapping month is always safe."""
+        """Parses an FNB CSV export and inserts new rows only.
+        Cross-account guard prevents importing a statement that already
+        exists under a different account."""
 
         account_label, parsed_rows, closing_balance_minor, statement_date = parse_fnb_statement(filepath)
         account = account_override.strip() or account_label or "Unspecified Account"
@@ -181,12 +218,19 @@ class LedgerService:
         if not parsed_rows:
             return {"imported": 0, "skipped_duplicates": 0, "account": account}
 
+        import_batch = Path(filepath).name
+        parsed_keys = [(r.date, r.amount_minor, r.description) for r in parsed_rows]
+
+        error = self._cross_account_guard(parsed_keys, account, import_batch)
+        if error:
+            return {"imported": 0, "skipped_duplicates": 0, "account": account,
+                    "error": error}
+
         existing = self.repository.list_for_account(account)
         existing_counts = Counter(
             (row.date, row.amount_minor, row.description) for row in existing
         )
 
-        import_batch = Path(filepath).name
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         to_insert = []
         skipped = 0
@@ -304,12 +348,19 @@ class LedgerService:
         if not parsed_rows:
             return {"imported": 0, "skipped_duplicates": 0, "account": account}
 
+        import_batch = Path(filepath).name
+        parsed_keys = [(r.date, r.amount_minor, r.description) for r in parsed_rows]
+
+        error = self._cross_account_guard(parsed_keys, account, import_batch)
+        if error:
+            return {"imported": 0, "skipped_duplicates": 0, "account": account,
+                    "error": error}
+
         existing = self.repository.list_for_account(account)
         existing_counts = Counter(
             (row.date, row.amount_minor, row.description) for row in existing
         )
 
-        import_batch = Path(filepath).name
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         to_insert = []
         skipped = 0
@@ -360,12 +411,19 @@ class LedgerService:
         if not parsed_rows:
             return {"imported": 0, "skipped_duplicates": 0, "account": account}
 
+        import_batch = Path(filepath).name
+        parsed_keys = [(r.date, r.amount_minor, r.description) for r in parsed_rows]
+
+        error = self._cross_account_guard(parsed_keys, account, import_batch)
+        if error:
+            return {"imported": 0, "skipped_duplicates": 0, "account": account,
+                    "error": error}
+
         existing = self.repository.list_for_account(account)
         existing_counts = Counter(
             (row.date, row.amount_minor, row.description) for row in existing
         )
 
-        import_batch = Path(filepath).name
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         to_insert = []
         skipped = 0

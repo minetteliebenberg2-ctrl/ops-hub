@@ -64,6 +64,7 @@ class ModuleNav(ctk.CTkFrame):
         "TrendingUp": "📈",
         "FileCheck": "✅",
         "Share": "📣",
+        "Wallet": "💰",
     }
 
     # Fallback icons for modules that don't set module_info.icon at all

@@ -40,6 +40,7 @@ ICON_MAP = {
     "troubleshooter": "🛠️",
     "job_costing": "📈",
     "social_media": "📣",
+    "money_owing": "💰",
 }
 
 
