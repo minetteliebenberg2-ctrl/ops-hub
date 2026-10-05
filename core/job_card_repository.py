@@ -53,7 +53,7 @@ class JobCardRepository:
             job_card = JobCard(
                 id=str(uuid4()),
                 customer_id=customer_id,
-                site_id=site_id,
+                site_id=site_id or None,
                 job_card_number=job_card_number,
                 created_at=now,
                 updated_at=now,
@@ -71,7 +71,7 @@ class JobCardRepository:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    job_card.id, job_card.customer_id, job_card.site_id, job_card.job_card_number,
+                    job_card.id, job_card.customer_id, job_card.site_id or None, job_card.job_card_number,
                     job_card.purchase_order, job_card.bill_to_name, job_card.delivery_address,
                     job_card.status, job_card.notes, job_card.created_at, job_card.updated_at,
                     job_card.created_by, job_card.updated_by,
