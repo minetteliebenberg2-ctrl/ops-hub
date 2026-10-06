@@ -25,7 +25,7 @@ class TroubleshooterTests(unittest.TestCase):
             destination = Path(directory) / "health.txt"
             path = TroubleshooterService().export_report(sample_results(), destination, datetime(2026, 7, 21, 10, 30))
             text = path.read_text(encoding="utf-8")
-            for expected in ("FC Hub Troubleshooter", "Checks run: 4", "Blocking failures: 1", "Unicode ✓", "Recommendation: Repair"):
+            for expected in ("Diagnostic Report", "Checks run: 4", "Blocking failures: 1", "Unicode ✓", "Recommendation: Repair"):
                 self.assertIn(expected, text)
 
     def test_report_does_not_overwrite(self):

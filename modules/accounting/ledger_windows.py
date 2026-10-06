@@ -2275,6 +2275,7 @@ class ReportsWindow(ctk.CTkToplevel):
         self.configure(fg_color=THEME_DARK_GREY)
 
         self.service = LedgerService()
+        self.selected_account = "All Accounts"
 
         self._build_ui()
         self.refresh()
@@ -2289,10 +2290,25 @@ class ReportsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(
             header_row, text="Financial Reports", font=("Segoe UI", 15, "bold"), text_color=THEME_TEXT_PRIMARY,
         ).pack(side="left")
+
+        controls = ctk.CTkFrame(header_row, fg_color=THEME_DARK_GREY)
+        controls.pack(side="right")
+
+        ctk.CTkLabel(
+            controls, text="Account", font=("Segoe UI", 10), text_color=THEME_TEXT_SECONDARY,
+        ).pack(side="left", padx=(0, 5))
+        accounts = self.service.list_accounts()
+        account_options = ["All Accounts"] + accounts
+        self.account_menu = ctk.CTkOptionMenu(
+            controls, values=account_options, command=self._on_account_changed, width=140,
+        )
+        self.account_menu.set("All Accounts")
+        self.account_menu.pack(side="left", padx=(0, 15))
+
         ctk.CTkButton(
-            header_row, text="Refresh", command=self.refresh, width=80, height=28,
+            controls, text="Refresh", command=self.refresh, width=80, height=28,
             fg_color=BRAND_GREEN, hover_color=COLORS["accent_hover"],
-        ).pack(side="right")
+        ).pack(side="left")
 
         self.tabs = ctk.CTkTabview(main_frame, fg_color=THEME_SURFACE)
         self.tabs.pack(fill="both", expand=True)
@@ -2302,9 +2318,13 @@ class ReportsWindow(ctk.CTkToplevel):
         self.monthly_tab = self.tabs.add("Monthly Summary")
         self.category_tab = self.tabs.add("Category Analysis")
 
-    def refresh(self):
+    def _on_account_changed(self, label):
+        self.selected_account = label
+        self.refresh()
 
-        summary = self.service.get_summary()
+    def refresh(self):
+        account = None if self.selected_account == "All Accounts" else self.selected_account
+        summary = self.service.get_summary(account=account)
         self._build_income_statement(summary)
         self._build_expense_breakdown(summary)
         self._build_monthly_summary(summary)
@@ -2332,7 +2352,8 @@ class ReportsWindow(ctk.CTkToplevel):
         from core.business_settings_service import BusinessSettingsService
         from core.ledger_report_pdf import generate_income_statement_pdf
 
-        summary = self.service.get_summary(date_from=date_from or None, date_to=date_to or None)
+        account = None if self.selected_account == "All Accounts" else self.selected_account
+        summary = self.service.get_summary(account=account, date_from=date_from or None, date_to=date_to or None)
         business_settings = BusinessSettingsService().get_settings()
 
         try:
