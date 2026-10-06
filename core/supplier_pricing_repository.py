@@ -12,7 +12,7 @@ from core.database import database
 from core.supplier_pricing import SupplierPriceItem
 
 
-CATEGORIES = ("Steel", "Netting", "Paint", "Hardware", "Labour")
+CATEGORIES = ("Steel", "Materials", "Paint", "Hardware", "Labour")
 
 
 class SupplierPriceItemRepository:

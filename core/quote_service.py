@@ -322,7 +322,7 @@ class QuoteService:
             return
 
         subtotal = sum(item.amount_minor for item in self.line_items.list_for_quote(quote_id))
-        # FacilitiesCo is not VAT registered (confirmed business rule) - no
+        # Business is not VAT registered (confirmed business rule) - no
         # VAT line is added to quotes it issues.
         quote.subtotal_minor = subtotal
         quote.vat_minor = 0

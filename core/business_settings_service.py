@@ -2,7 +2,7 @@
 # FC Hub - Business Settings Service
 # ----------------------------------------------------------
 # Purpose:
-# Business service layer for FacilitiesCo's own settings and
+# Business service layer for the company's own settings and
 # addresses.
 #
 # Author: Minette & James

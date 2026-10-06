@@ -3,7 +3,7 @@
 # ----------------------------------------------------------
 # Purpose:
 # Register the Settings module with FC Hub. Owns
-# FacilitiesCo's own business details and addresses (master
+# The company's own business details and addresses (master
 # spec 7.17) - distinct from CRM customer data.
 #
 # Author: Minette & James

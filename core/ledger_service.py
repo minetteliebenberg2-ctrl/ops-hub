@@ -111,7 +111,7 @@ TRANSFER_LIKE_CATEGORIES = {
 # Auto-categorization rules for bank-statement imports.
 #
 # Ops Hub is a generic tool, so the account-specific rule set this
-# started life with (FacilitiesCo subcontractors, netting/steel/paint
+# started life with (common subcontractor and supplier
 # suppliers, and the owner's personal payees) was removed on
 # 2026-09-23. The bank already categorises its own statements, and a
 # rule matching someone else's payee names would mis-tag every row.

@@ -1,3 +1,4 @@
+# NOTE: This file is FC Hub-specific (shade-netting pricing export) and unused in Ops Hub.
 """Export the pricing schedule to Excel: supplier costs, the per-structure
 material breakdown, and the standard car-bay sizes.
 

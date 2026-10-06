@@ -1,7 +1,11 @@
 """Job Card docx export.
 
-Same header/footer design as Quote/Invoice PDFs (Lato, brand green #21A94D,
-FacilitiesCo logo, business block). No amounts, no remittance — work-log only.
+Header/footer design mirrors Quote/Invoice PDFs (Lato, brand green, logo,
+business block). No amounts, no remittance -- work-log only.
+
+Business identity (trading name, email, phone, website, reg no.) is read
+from the business_settings table at runtime so the template works for any
+company without code changes.
 """
 
 import shutil
@@ -16,6 +20,7 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 from core.app_paths import get_assets_dir
+from core.business_settings_service import BusinessSettingsService
 
 GREEN = RGBColor(0x21, 0xA9, 0x4D)
 GREEN_HEX = "21A94D"
@@ -27,11 +32,18 @@ FONT = "Lato"
 ASSETS_DIR = get_assets_dir()
 LOGO_PATH = ASSETS_DIR / "logo_placeholder.png"
 
-BUSINESS_LINE1 = "Shade Solutions by FacilitiesCo (Pty) Ltd"
-BUSINESS_LINE2 = "Germiston, South Africa, 1401"
-BUSINESS_LINE3 = "sales@facilitiesco.com"
-BUSINESS_LINE4 = "010 015 0532 / 083 378 5122"
-BUSINESS_LINE5 = "www.facilitiesco.com"
+
+def _load_business_lines():
+    """Read business identity from the database at generation time."""
+    settings = BusinessSettingsService().get_settings()
+    legal = settings.legal_name or settings.trading_name or "Company Name"
+    return (
+        legal,
+        settings.email or "",
+        settings.phone or "",
+        settings.website or "",
+        settings.registration_number or "",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +161,8 @@ def _build_header(doc):
         run = p.add_run()
         run.add_picture(str(LOGO_PATH), width=Cm(7))
     else:
-        r = p.add_run("FacilitiesCo")
+        fallback_name = _load_business_lines()[0]
+        r = p.add_run(fallback_name)
         _set_font(r, size=16, bold=True, color=GREEN)
 
     # Business block cell
@@ -158,13 +171,15 @@ def _build_header(doc):
     biz_cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
     _cell_padding(biz_cell, 0, 0, 0, 0)
 
-    lines = [
-        (BUSINESS_LINE1, 9.5, True),
-        (BUSINESS_LINE2, 9, False),
-        (BUSINESS_LINE3, 9, False),
-        (BUSINESS_LINE4, 9, False),
-        (BUSINESS_LINE5, 9, False),
-    ]
+    legal, email, phone, website, reg_no = _load_business_lines()
+    biz_lines = [(legal, 9.5, True)]
+    if email:
+        biz_lines.append((email, 9, False))
+    if phone:
+        biz_lines.append((phone, 9, False))
+    if website:
+        biz_lines.append((website, 9, False))
+    lines = biz_lines
     first = True
     for text, size, bold in lines:
         if first:
@@ -256,12 +271,14 @@ def _build_footer(doc):
     p.paragraph_format.space_after = Pt(0)
     r = p.add_run("DESIGN  |  CREATE  |  INNOVATE  |  MAINTAIN")
     _set_font(r, size=8, color=GREY, italic=True)
-    p2 = doc.add_paragraph()
-    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p2.paragraph_format.space_before = Pt(1)
-    p2.paragraph_format.space_after = Pt(0)
-    r2 = p2.add_run("Reg No. 2024/772013/07  ·  @facilitiesco")
-    _set_font(r2, size=8, color=GREY)
+    legal, email, phone, website, reg_no = _load_business_lines()
+    if reg_no:
+        p2 = doc.add_paragraph()
+        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p2.paragraph_format.space_before = Pt(1)
+        p2.paragraph_format.space_after = Pt(0)
+        r2 = p2.add_run(f"Reg No. {reg_no}")
+        _set_font(r2, size=8, color=GREY)
 
 
 # ---------------------------------------------------------------------------

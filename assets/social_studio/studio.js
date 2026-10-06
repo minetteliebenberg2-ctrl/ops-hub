@@ -51,11 +51,11 @@ const state = {
   logo: true,
   footer: true,
   text: {
-    kicker: 'Germiston',
+    kicker: 'Location',
     headline: 'Your headline goes here',
     body: 'One or two lines of body copy.',
-    price: 'R9 009',
-    priceNote: 'Four post shadeport, single bay, fitted'
+    price: 'R0 000',
+    priceNote: 'Product or service description'
   },
   photos: [null, null]
 };

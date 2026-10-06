@@ -1,3 +1,10 @@
+"""FC Hub-specific shade-netting technical spec sheet.
+
+This file is unused in Ops Hub -- it contains shade-netting structure
+specifications that only apply to FacilitiesCo's shade netting business.
+Kept for fork compatibility; safe to ignore or delete in Ops Hub.
+"""
+
 import os
 import sys
 

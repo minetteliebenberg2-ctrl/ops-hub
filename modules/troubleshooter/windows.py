@@ -1,4 +1,4 @@
-"""Native Ops Hub Diagnostics user interface."""
+"""Native FC Hub Troubleshooter user interface."""
 
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -6,6 +6,7 @@ from tkinter import messagebox, ttk
 import customtkinter as ctk
 
 from core.diagnostics.models import DiagnosticStatus
+from core.diagnostics.fixers import can_fix, run_fix
 from modules.troubleshooter.services import TroubleshooterService, summarize
 
 
@@ -23,15 +24,23 @@ class TroubleshooterWindow(ctk.CTkFrame):
         self._update_summary()
 
     def _build_ui(self):
-        ctk.CTkLabel(self, text="Ops Hub Diagnostics", font=("Segoe UI", 24, "bold")).pack(anchor="w", padx=15, pady=(15, 2))
-        ctk.CTkLabel(self, text="Checks Ops Hub health safely without changing user data.").pack(anchor="w", padx=15, pady=(0, 12))
+        ctk.CTkLabel(self, text="System Diagnostics", font=("Segoe UI", 24, "bold")).pack(anchor="w", padx=15, pady=(15, 2))
+        ctk.CTkLabel(self, text="Diagnose problems and apply safe fixes. A backup is created before every fix.").pack(anchor="w", padx=15, pady=(0, 12))
 
         toolbar = ctk.CTkFrame(self)
         toolbar.pack(fill="x", padx=15, pady=(0, 10))
         self.buttons = []
-        for text, command in (("Run All Checks", self.run_all), ("Run Selected", self.run_selected), ("Export Report", self.export_report), ("Clear Results", self.clear_results), ("Check & Apply Migrations", self.check_and_apply_migrations)):
-            button = ctk.CTkButton(toolbar, text=text, command=command, width=130)
-            button.pack(side="left", padx=5, pady=8)
+        for text, command in (
+            ("Run All Checks", self.run_all),
+            ("Run Selected", self.run_selected),
+            ("Fix Selected", self._fix_selected),
+            ("Fix All Issues", self._fix_all),
+            ("Export Report", self.export_report),
+            ("Clear Results", self.clear_results),
+            ("Check & Apply Migrations", self.check_and_apply_migrations),
+        ):
+            button = ctk.CTkButton(toolbar, text=text, command=command, width=120)
+            button.pack(side="left", padx=4, pady=8)
             self.buttons.append(button)
 
         summary = ctk.CTkFrame(self)
@@ -104,7 +113,11 @@ class TroubleshooterWindow(ctk.CTkFrame):
         for index, result in enumerate(self.results):
             iid = f"result-{index}"
             self.result_by_id[iid] = result
-            self.tree.insert("", "end", iid=iid, values=(result.status.value, result.category, result.name, result.summary))
+            fixable = can_fix(result.check_id)
+            status_text = result.status.value
+            if fixable and result.status in (DiagnosticStatus.FAIL, DiagnosticStatus.WARNING):
+                status_text += " ⚡"
+            self.tree.insert("", "end", iid=iid, values=(status_text, result.category, result.name, result.summary))
             if result.check_id in selected_ids:
                 self.tree.selection_add(iid)
         self._update_summary()
@@ -114,21 +127,72 @@ class TroubleshooterWindow(ctk.CTkFrame):
         if not selection:
             return
         result = self.result_by_id[selection[0]]
+        fixable = can_fix(result.check_id)
         text = (f"Status: {result.status.value}\nCategory: {result.category}\nCheck: {result.name}\n"
-                f"Blocking: {'Yes' if result.is_blocking else 'No'}\n\nSummary\n{result.summary}\n\n"
+                f"Blocking: {'Yes' if result.is_blocking else 'No'}\n"
+                f"Auto-fix available: {'Yes — select and click Fix Selected' if fixable else 'No'}\n\n"
+                f"Summary\n{result.summary}\n\n"
                 f"Details\n{result.details}\n\nRecommendation\n{result.recommendation}")
         self.details.configure(state="normal")
         self.details.delete("1.0", tk.END)
         self.details.insert("1.0", text)
         self.details.configure(state="disabled")
 
+    def _fix_selected(self):
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showinfo("Fix Selected", "Select one or more failed checks to fix.", parent=self.winfo_toplevel())
+            return
+        fixable = []
+        for iid in selection:
+            result = self.result_by_id.get(iid)
+            if result and can_fix(result.check_id) and result.status in (DiagnosticStatus.FAIL, DiagnosticStatus.WARNING):
+                fixable.append(result.check_id)
+        if not fixable:
+            messagebox.showinfo("Fix Selected", "None of the selected checks have an auto-fix available.", parent=self.winfo_toplevel())
+            return
+        self._apply_fixes(fixable)
+
+    def _fix_all(self):
+        fixable = [
+            r.check_id for r in self.results
+            if can_fix(r.check_id) and r.status in (DiagnosticStatus.FAIL, DiagnosticStatus.WARNING)
+        ]
+        if not fixable:
+            messagebox.showinfo("Fix All", "No fixable issues found. Run checks first.", parent=self.winfo_toplevel())
+            return
+        self._apply_fixes(fixable)
+
+    def _apply_fixes(self, check_ids):
+        names = ", ".join(check_ids)
+        proceed = messagebox.askyesno(
+            "Apply Fixes",
+            f"About to fix {len(check_ids)} issue(s):\n{names}\n\n"
+            "The database will be backed up before each fix. Continue?",
+            parent=self.winfo_toplevel(),
+        )
+        if not proceed:
+            return
+        self._set_controls("disabled")
+        messages = []
+        for cid in check_ids:
+            self.status_label.configure(text=f"Fixing {cid}...")
+            self.update_idletasks()
+            result = run_fix(cid)
+            status = "✓" if result.success else "✗"
+            messages.append(f"{status} {cid}: {result.message}")
+        self._set_controls("normal")
+        self.status_label.configure(text=f"Fixed {len(check_ids)} issue(s). Re-running checks...")
+        self.update_idletasks()
+        messagebox.showinfo("Fix Results", "\n\n".join(messages), parent=self.winfo_toplevel())
+        self._run(self.service.run_all)
+
     def sort_by(self, column):
         selected = self.tree.selection()
         status_rank = {DiagnosticStatus.FAIL.value: 0, DiagnosticStatus.WARNING.value: 1, DiagnosticStatus.INFO.value: 2, DiagnosticStatus.PASS.value: 3}
-        index = self.columns.index(column)
         reverse = self.sort_reverse.get(column, False)
         rows = list(self.tree.get_children())
-        rows.sort(key=lambda item: status_rank.get(self.tree.set(item, column), 99) if column == "status" else self.tree.set(item, column).casefold(), reverse=reverse)
+        rows.sort(key=lambda item: status_rank.get(self.tree.set(item, column).replace(" ⚡", ""), 99) if column == "status" else self.tree.set(item, column).casefold(), reverse=reverse)
         for position, item in enumerate(rows):
             self.tree.move(item, "", position)
         self.tree.selection_set(selected)
@@ -194,8 +258,12 @@ class TroubleshooterWindow(ctk.CTkFrame):
 
     def _update_summary(self):
         values = summarize(self.results)
-        self.summary_label.configure(text=(f"Checks: {values['total']}   Passed: {values['passed']}   Warnings: {values['warnings']}   "
-                                           f"Failed: {values['failed']}   Info: {values['informational']}   Blocking: {values['blocking']}"))
+        fixable = sum(1 for r in self.results if can_fix(r.check_id) and r.status in (DiagnosticStatus.FAIL, DiagnosticStatus.WARNING))
+        text = (f"Checks: {values['total']}   Passed: {values['passed']}   Warnings: {values['warnings']}   "
+                f"Failed: {values['failed']}   Info: {values['informational']}   Blocking: {values['blocking']}")
+        if fixable:
+            text += f"   ⚡ Fixable: {fixable}"
+        self.summary_label.configure(text=text)
 
     def _set_controls(self, state):
         for button in self.buttons:

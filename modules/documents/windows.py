@@ -28,8 +28,8 @@ from core.picklist_service import DOCUMENT_CATEGORY, PicklistService
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
-LETTERHEAD_TEMPLATE = TEMPLATE_DIR / "FacilitiesCo_Letterhead.docx"
-SPREADSHEET_TEMPLATE = TEMPLATE_DIR / "FacilitiesCo_Spreadsheet.xlsx"
+LETTERHEAD_TEMPLATE = TEMPLATE_DIR / "Letterhead.docx"
+SPREADSHEET_TEMPLATE = TEMPLATE_DIR / "Spreadsheet.xlsx"
 
 
 def open_in_default_app(path):

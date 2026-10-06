@@ -1,3 +1,4 @@
+# NOTE: This file is FC Hub-specific (shade-netting structures) and unused in Ops Hub.
 # ==========================================================
 # FC Hub - Structure Catalog
 # ----------------------------------------------------------

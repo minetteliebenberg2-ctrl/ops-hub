@@ -240,7 +240,14 @@ class DatabaseHealthCheck(Check):
     }
 
     def __init__(self, path=None):
-        self.path = Path(path) if path else PROJECT_ROOT / "database" / "app.db"
+        if path:
+            self.path = Path(path)
+        else:
+            try:
+                from core.database import database
+                self.path = Path(database.path)
+            except Exception:
+                self.path = PROJECT_ROOT / "database" / "fc_hub.db"
 
     def run(self):
         if not self.path.exists():
@@ -318,7 +325,11 @@ class ResourceAndPathCheck(Check):
     name = "Paths and resources"
 
     def run(self):
-        database = PROJECT_ROOT / "database" / "app.db"
+        try:
+            from core.database import database as db_mod
+            database = Path(db_mod.path)
+        except Exception:
+            database = PROJECT_ROOT / "database" / "fc_hub.db"
         issues = []
         if not PROJECT_ROOT.is_absolute():
             issues.append("Project root is not absolute.")
@@ -350,5 +361,9 @@ class BasicApplicationHealthCheck(Check):
 def build_default_registry():
     registry = DiagnosticRegistry()
     for check_type in (ProjectStructureCheck, PythonEnvironmentCheck, DependencyCheck, ImportHealthCheck, ModuleRegistrationCheck, ModuleDiscoveryCheck, FilesystemAccessCheck, DatabaseHealthCheck, BackupHealthCheck, ResourceAndPathCheck, BasicApplicationHealthCheck):
+        registry.register(check_type())
+    from core.diagnostics.checks.data_checks import DATA_CHECKS
+    from core.diagnostics.checks.file_checks import FILE_CHECKS
+    for check_type in DATA_CHECKS + FILE_CHECKS:
         registry.register(check_type())
     return registry

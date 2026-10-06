@@ -1056,7 +1056,7 @@ class CRMWindow(ctk.CTkFrame):
     # ==================================================
 
     def _import_from_pdf(self):
-        """Bulk-import customers from FacilitiesCo Estimate/Invoice PDFs.
+        """Bulk-import customers from Estimate/Invoice PDFs.
 
         Ported from the pre-redesign windows_old.py (2026-08-07 crash fix
         retained: per-file try/except so a bad file is skipped, not fatal).

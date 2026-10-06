@@ -37,8 +37,8 @@ from core.document_pdf import BUSINESS_LOCALITY, TAGLINE
 TEMPLATE_DIR = Path(__file__).resolve().parent
 LOGO_PATH = get_assets_dir() / "logo_placeholder.png"
 
-LETTERHEAD_PATH = TEMPLATE_DIR / "FacilitiesCo_Letterhead.docx"
-SPREADSHEET_PATH = TEMPLATE_DIR / "FacilitiesCo_Spreadsheet.xlsx"
+LETTERHEAD_PATH = TEMPLATE_DIR / "Letterhead.docx"
+SPREADSHEET_PATH = TEMPLATE_DIR / "Spreadsheet.xlsx"
 
 # Matches ACCENT_COLOR / INK_COLOR / GREY_COLOR in core/document_pdf.py.
 ACCENT_HEX = "1B7A3D"
@@ -51,14 +51,27 @@ GREY_RGB = RGBColor(0x6B, 0x72, 0x80)
 
 FONT = "Lato"
 
-TRADING_NAME = "Shade Solutions by FacilitiesCo (Pty) Ltd"
-CONTACT_LINES = (
-    BUSINESS_LOCALITY,
-    "sales@facilitiesco.com",
-    "010 015 0532 / 083 378 5122",
-    "www.facilitiesco.com",
-)
-REGISTRATION_LINE = "Reg: 2024/772013/07  |  Not VAT registered"
+def _load_identity():
+    """Read business identity from the database at generation time."""
+    from core.business_settings_service import BusinessSettingsService
+    s = BusinessSettingsService().get_settings()
+    trading = s.legal_name or s.trading_name or "Company Name"
+    lines = []
+    if BUSINESS_LOCALITY:
+        lines.append(BUSINESS_LOCALITY)
+    if s.email:
+        lines.append(s.email)
+    if s.phone:
+        lines.append(s.phone)
+    if s.website:
+        lines.append(s.website)
+    reg_parts = []
+    if s.registration_number:
+        reg_parts.append(f"Reg: {s.registration_number}")
+    if not s.vat_registered:
+        reg_parts.append("Not VAT registered")
+    reg_line = "  |  ".join(reg_parts) if reg_parts else ""
+    return trading, tuple(lines), reg_line
 
 
 def _set_font(run, size=10.5, color=INK_RGB, bold=False, italic=False):
@@ -123,11 +136,12 @@ def build_letterhead():
     if LOGO_PATH.is_file():
         logo_para.add_run().add_picture(str(LOGO_PATH), width=Cm(6.4))
 
+    trading_name, contact_lines, registration_line = _load_identity()
     contact_para = contact_cell.paragraphs[0]
     contact_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run = contact_para.add_run(TRADING_NAME)
+    run = contact_para.add_run(trading_name)
     _set_font(run, size=10, bold=True)
-    for line in CONTACT_LINES:
+    for line in contact_lines:
         contact_para.add_run("\n")
         _set_font(contact_para.add_run(line), size=9.5, color=INK_RGB)
 
@@ -149,12 +163,13 @@ def build_letterhead():
     for _ in range(3):
         doc.add_paragraph()
 
+    trading_name_so, contact_lines_so, _ = _load_identity()
     signoff = doc.add_paragraph()
     signoff.paragraph_format.space_before = Pt(24)
     _set_font(signoff.add_run("Prepared By: "), size=10.5, bold=True)
-    _set_font(signoff.add_run("Minette Liebenberg"), size=10.5)
-    for line in ("Director", "Shade Solutions by FacilitiesCo",
-                 "sales@facilitiesco.com", "010 015 0532 / 083 378 5122"):
+    _set_font(signoff.add_run("[NAME]"), size=10.5)
+    signoff_lines = ["Director", trading_name_so] + list(contact_lines_so)
+    for line in signoff_lines:
         signoff.add_run("\n")
         _set_font(signoff.add_run(line), size=10)
 
@@ -162,9 +177,12 @@ def build_letterhead():
     footer = section.footer
     footer_para = footer.paragraphs[0]
     footer_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    _set_font(footer_para.add_run(TAGLINE), size=8, color=INK_RGB, bold=True)
-    footer_para.add_run("\n")
-    _set_font(footer_para.add_run(REGISTRATION_LINE), size=7.5, color=GREY_RGB)
+    _, _, reg_line = _load_identity()
+    if TAGLINE:
+        _set_font(footer_para.add_run(TAGLINE), size=8, color=INK_RGB, bold=True)
+    if reg_line:
+        footer_para.add_run("\n")
+        _set_font(footer_para.add_run(reg_line), size=7.5, color=GREY_RGB)
 
     doc.save(str(LETTERHEAD_PATH))
     return LETTERHEAD_PATH
@@ -192,13 +210,14 @@ def build_spreadsheet():
         image.width, image.height = 240, 56
         sheet.add_image(image, "A1")
 
+    xl_trading, xl_contact, xl_reg = _load_identity()
     trading = sheet["D1"]
-    trading.value = TRADING_NAME
+    trading.value = xl_trading
     trading.font = Font(name=FONT, size=10, bold=True, color=INK_HEX)
     trading.alignment = Alignment(horizontal="right")
     sheet.merge_cells("D1:F1")
 
-    for offset, line in enumerate(CONTACT_LINES, start=2):
+    for offset, line in enumerate(xl_contact, start=2):
         cell = sheet.cell(row=offset, column=4)
         cell.value = line
         cell.font = Font(name=FONT, size=9, color=INK_HEX)
@@ -215,9 +234,10 @@ def build_spreadsheet():
     footer.value = TAGLINE
     footer.font = Font(name=FONT, size=8, bold=True, color=INK_HEX)
 
-    registration = sheet.cell(row=footer_row + 1, column=1)
-    registration.value = REGISTRATION_LINE
-    registration.font = Font(name=FONT, size=7.5, color=GREY_HEX)
+    if xl_reg:
+        registration = sheet.cell(row=footer_row + 1, column=1)
+        registration.value = xl_reg
+        registration.font = Font(name=FONT, size=7.5, color=GREY_HEX)
 
     # Leave the user on the first free cell below the header.
     sheet.freeze_panes = "A7"

@@ -2,7 +2,7 @@
 # FC Hub - Business Settings
 # ----------------------------------------------------------
 # Purpose:
-# FacilitiesCo's own business identity, contact, and banking
+# The company's own business identity, contact, and banking
 # details, and its own addresses. Distinct from CRM customer
 # data (core/customer.py, core/address.py).
 #

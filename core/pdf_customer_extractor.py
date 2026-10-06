@@ -3,7 +3,7 @@
 # ----------------------------------------------------------
 # Purpose:
 # Best-effort extraction of a customer's name, address, contact
-# person, email, and VAT number from FacilitiesCo's own legacy
+# person, email, and VAT number from the company's own legacy
 # Estimate/Invoice/Statement PDF template (the "To: ... Attention:
 # ... Email:" layout used for years of real quotes, alongside and
 # before FC Hub itself). This is NOT a general-purpose PDF parser -
