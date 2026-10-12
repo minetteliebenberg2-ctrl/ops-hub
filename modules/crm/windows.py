@@ -1320,6 +1320,15 @@ class CustomerForm(ctk.CTkToplevel):
             "error_label": None,
         }
 
+    def _ensure_client_folder(self):
+        """Create the client's folder after a manual save. Never blocks the save."""
+        try:
+            service = getattr(self.crm_service, "client_folder_service", None)
+            if service is not None and self.customer is not None:
+                service.ensure_client_folder(self.customer)
+        except Exception:
+            pass
+
     def _save(self):
         """Save customer."""
         # Validate
@@ -1354,6 +1363,7 @@ class CustomerForm(ctk.CTkToplevel):
                     updated_at=now,
                 )
                 self.customer = self.crm_service.save_customer(customer)
+                self._ensure_client_folder()
             else:
                 self.customer.name = data["name"]
                 self.customer.customer_type = data["customer_type"]
@@ -1367,6 +1377,7 @@ class CustomerForm(ctk.CTkToplevel):
                 self.customer.notes = data["notes"]
                 self.customer.updated_at = now
                 self.crm_service.save_customer(self.customer)
+                self._ensure_client_folder()
 
             contact_name = data.get("contact_name", "").strip()
             if contact_name:

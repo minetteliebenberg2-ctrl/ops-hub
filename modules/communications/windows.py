@@ -1416,20 +1416,47 @@ class CRMImportWizard(ctk.CTkToplevel):
             font=("Segoe UI", 20, "bold"),
         ).pack(pady=(20, 10))
 
-        self.action = ctk.StringVar(value="Skip")
+        # Default is a real import action, not Skip - Skip silently
+        # records "Skipped" and reports "0 imported", which looked like
+        # the wizard was broken.
+        self.action = ctk.StringVar(value="Create New Contact under Existing Customer")
 
         ctk.CTkOptionMenu(
             self,
             values=[
-                "Link to Existing Contact",
-                "Add Email to Existing Contact",
                 "Create New Contact under Existing Customer",
                 "Create New Customer and Contact",
+                "Link to Existing Contact",
+                "Add Email to Existing Contact",
                 "Skip",
                 "Return to Review Queue",
             ],
             variable=self.action,
+            command=lambda value: self._sync_customer_picker(),
         ).pack(pady=(0, 10))
+
+        # Existing-customer picker - the wizard never had one, so
+        # "Create New Contact under Existing Customer" always failed
+        # with "Select an existing customer before importing."
+        self.customer_lookup = {}
+        crm_service = getattr(self.importer, "crm_service", None)
+        if crm_service is not None:
+            for customer in crm_service.list_customers():
+                label = f"{customer.name} ({customer.customer_number})" if customer.customer_number else customer.name
+                self.customer_lookup[label] = customer.id
+
+        self.customer_choice = ctk.StringVar(value="")
+        self.customer_frame = ctk.CTkFrame(self, fg_color="transparent")
+        ctk.CTkLabel(self.customer_frame, text="Add to customer:").pack(side="left", padx=(0, 8))
+        self.customer_menu = ctk.CTkComboBox(
+            self.customer_frame,
+            values=sorted(self.customer_lookup, key=str.lower),
+            variable=self.customer_choice,
+            width=420,
+        )
+        self.customer_menu.pack(side="left")
+        self.customer_menu.set("")
+        self._sync_customer_picker()
 
         table = ttk.Treeview(
             self,
@@ -1471,6 +1498,8 @@ class CRMImportWizard(ctk.CTkToplevel):
             )
 
         table.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        self.table_widget = table
+        self._sync_customer_picker()
 
         ctk.CTkButton(
             self,
@@ -1480,9 +1509,43 @@ class CRMImportWizard(ctk.CTkToplevel):
 
     # ------------------------------------------------------
 
+    def _sync_customer_picker(self):
+
+        if self.action.get() == "Create New Contact under Existing Customer":
+            anchor = self._table_anchor()
+            if anchor is not None:
+                self.customer_frame.pack(pady=(0, 10), before=anchor)
+            else:
+                self.customer_frame.pack(pady=(0, 10))
+        else:
+            self.customer_frame.pack_forget()
+
+    def _table_anchor(self):
+
+        return getattr(self, "table_widget", None)
+
+    # ------------------------------------------------------
+
     def import_candidates(self):
 
         action = self.action.get()
+        payload = {}
+
+        if action == "Create New Contact under Existing Customer":
+
+            customer_id = self.customer_lookup.get(self.customer_choice.get().strip())
+
+            if not customer_id:
+
+                messagebox.showwarning(
+                    "CRM Import",
+                    "Pick the customer to add these contacts to.",
+                    parent=self,
+                )
+
+                return
+
+            payload = {"customer_id": customer_id}
 
         if action == "Return to Review Queue":
 
@@ -1498,21 +1561,39 @@ class CRMImportWizard(ctk.CTkToplevel):
             return
 
         imported = []
+        failed = []
 
         for candidate in self.candidates:
 
-            status = self.importer.import_candidate(candidate, action)
+            status = self.importer.import_candidate(candidate, action, payload)
 
             if status == "Imported":
 
                 imported.append(candidate.normalized_email)
 
+            elif status == "Failed":
+
+                failed.append(candidate.normalized_email)
+
         if imported:
 
             self.repository.update_review_status(imported, REVIEW_IMPORTED)
 
-        messagebox.showinfo(
-            "CRM Import",
-            f"{len(imported)} candidates imported.",
-        )
-        self.destroy()
+        message = f"{len(imported)} candidates imported."
+
+        if failed:
+
+            lines = [
+                "",
+                f"{len(failed)} failed (nothing was changed for these):",
+                *failed[:8],
+                "",
+                "The reason is on record in the import history.",
+            ]
+            message += "\n" + "\n".join(lines)
+
+        messagebox.showinfo("CRM Import", message, parent=self)
+
+        if not failed:
+
+            self.destroy()
