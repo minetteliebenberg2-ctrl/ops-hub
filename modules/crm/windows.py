@@ -174,6 +174,10 @@ class CRMWindow(ctk.CTkFrame):
                 return
 
             # Display customer items
+            def _sort_name(c):
+                n = (c.name or "").strip().lower()
+                return n[4:] if n.startswith("the ") else n
+            filtered.sort(key=_sort_name)
             for customer in filtered:
                 self._add_customer_item(customer)
 
@@ -188,7 +192,7 @@ class CRMWindow(ctk.CTkFrame):
     # ==================================================
 
     def _add_customer_item(self, customer):
-        """Add a customer item to the list."""
+        """Compact single-line card: name · contact · phone · email."""
         item = ClickableCard(
             self.customer_list_frame,
             on_click=lambda c=customer: self._show_customer_detail(c),
@@ -196,36 +200,19 @@ class CRMWindow(ctk.CTkFrame):
             fg_color=COLORS["surface_secondary"],
             border_width=1,
             border_color=COLORS["border_default"],
-            corner_radius=8,
-            height=112,
+            corner_radius=6,
+            height=40,
         )
-        item.pack(fill="x", pady=SPACING["sm"])
+        item.pack(fill="x", pady=2)
         item.pack_propagate(False)
 
-        content = ctk.CTkFrame(item, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=SPACING["lg"], pady=SPACING["sm"])
+        row = ctk.CTkFrame(item, fg_color="transparent")
+        row.pack(fill="both", expand=True, padx=SPACING["md"], pady=4)
 
-        # Header: Company name + optional Active tick
-        header = ctk.CTkFrame(content, fg_color="transparent")
-        header.pack(fill="x", pady=(0, 2))
-
-        name_text = customer.name
-        if customer.customer_number:
-            name_text = f"{customer.customer_number}  {customer.name}"
         ctk.CTkLabel(
-            header,
-            text=name_text,
-            font=FONTS["heading_sm"],
-            text_color=COLORS["text_primary"],
-        ).pack(anchor="w", side="left")
-
-        if (customer.status or "Active") == "Active":
-            ctk.CTkLabel(
-                header,
-                text="✓",
-                font=FONTS["label_sm"],
-                text_color=COLORS["success"],
-            ).pack(anchor="e", side="right")
+            row, text=customer.name, font=FONTS["label"],
+            text_color=COLORS["text_primary"], anchor="w",
+        ).pack(side="left", padx=(0, SPACING["md"]))
 
         primary_contact = self._primary_contact(customer)
         contact_name = primary_contact.name if primary_contact and primary_contact.name else ""
@@ -235,45 +222,25 @@ class CRMWindow(ctk.CTkFrame):
         if not contact_number:
             contact_number = customer.phone or ""
         email = (primary_contact.email if primary_contact and primary_contact.email else "") or (customer.email or "")
-        address = self._primary_address_line(customer)
 
-        # Two-column body: contact info left, address right
-        body = ctk.CTkFrame(content, fg_color="transparent")
-        body.pack(fill="both", expand=True)
-        body.grid_columnconfigure(0, weight=1, uniform="cols")
-        body.grid_columnconfigure(1, weight=1, uniform="cols")
-
-        left = ctk.CTkFrame(body, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, SPACING["md"]))
-        right = ctk.CTkFrame(body, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="nsew")
-
-        left_rows = [
-            ("👤", contact_name, "No contact person"),
-            ("📞", contact_number, "No number on file"),
-            ("📧", email, "No email on file"),
+        info_parts = [
+            ("👤", contact_name),
+            ("📞", contact_number),
+            ("📧", email),
         ]
-        for icon, value, empty in left_rows:
-            has = bool(value)
+        for icon, value in info_parts:
+            text = f"{icon} {value}" if value else f"{icon} —"
             ctk.CTkLabel(
-                left,
-                text=f"{icon}  {value if has else empty}",
-                font=FONTS["body_sm"],
-                text_color=COLORS["text_secondary"] if has else COLORS["text_tertiary"],
+                row, text=text, font=FONTS["body_sm"],
+                text_color=COLORS["text_secondary"] if value else COLORS["text_tertiary"],
                 anchor="w",
-                justify="left",
-            ).pack(anchor="w", fill="x", pady=0)
+            ).pack(side="left", padx=(0, SPACING["md"]))
 
-        has_addr = bool(address)
-        ctk.CTkLabel(
-            right,
-            text=f"📍  {address if has_addr else 'No address on file'}",
-            font=FONTS["body_sm"],
-            text_color=COLORS["text_secondary"] if has_addr else COLORS["text_tertiary"],
-            anchor="nw",
-            justify="left",
-            wraplength=380,
-        ).pack(anchor="nw", fill="both", expand=True, pady=0)
+        if (customer.status or "Active") == "Active":
+            ctk.CTkLabel(
+                row, text="✓", font=FONTS["label_sm"],
+                text_color=COLORS["success"],
+            ).pack(side="right")
 
         item.activate()
 
@@ -1242,6 +1209,12 @@ class CustomerForm(ctk.CTkToplevel):
         for field_id, label, required, kind in fields_config:
             self._add_form_field(scroll, field_id, label, required, kind)
 
+        # --- Addresses section (edit mode only) ---
+        if self.mode == "edit" and self.customer:
+            self._addresses_container = ctk.CTkFrame(scroll, fg_color="transparent")
+            self._addresses_container.pack(fill="x", pady=(SPACING["md"], 0))
+            self._build_address_list()
+
         # Buttons
         button_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         button_frame.pack(fill="x", pady=(SPACING["lg"], 0))
@@ -1415,6 +1388,62 @@ class CustomerForm(ctk.CTkToplevel):
                     field_label = field_id.replace("_", " ").title()
                     errors.append(f"{field_label} is required")
         return errors
+
+    def _build_address_list(self):
+        for w in self._addresses_container.winfo_children():
+            w.destroy()
+        ctk.CTkLabel(
+            self._addresses_container, text="Addresses",
+            font=FONTS["heading_sm"], text_color=COLORS["text_primary"],
+        ).pack(anchor="w", pady=(0, SPACING["sm"]))
+        addresses = self.crm_service.list_addresses(self.customer.id)
+        if not addresses:
+            ctk.CTkLabel(
+                self._addresses_container, text="No addresses.",
+                font=FONTS["body_sm"], text_color=COLORS["text_tertiary"],
+            ).pack(anchor="w")
+            return
+        for addr in addresses:
+            row = ctk.CTkFrame(self._addresses_container, fg_color=COLORS["surface_secondary"],
+                               border_width=1, border_color=COLORS["border_light"], corner_radius=6)
+            row.pack(fill="x", pady=(0, SPACING["xs"]))
+            inner = ctk.CTkFrame(row, fg_color="transparent")
+            inner.pack(fill="both", padx=SPACING["sm"], pady=SPACING["sm"])
+            atype = addr.address_type or "Address"
+            parts = [p for p in [addr.line1, addr.line2, addr.city] if p]
+            ctk.CTkLabel(
+                inner, text=f"{atype}: {', '.join(parts) if parts else '(empty)'}",
+                font=FONTS["body_sm"], text_color=COLORS["text_primary"],
+                anchor="w", justify="left",
+            ).pack(side="left", fill="x", expand=True)
+            ctk.CTkButton(
+                inner, text="Edit", font=FONTS["body_sm"], height=24, width=48,
+                fg_color=COLORS["surface_tertiary"], text_color=COLORS["text_primary"],
+                border_width=1, border_color=COLORS["border_default"],
+                command=lambda a=addr: self._edit_address_from_form(a),
+            ).pack(side="right", padx=(4, 0))
+            ctk.CTkButton(
+                inner, text="Delete", font=FONTS["body_sm"], height=24, width=58,
+                fg_color=COLORS["surface_tertiary"], text_color=COLORS["danger"],
+                border_width=1, border_color=COLORS["border_default"],
+                command=lambda a=addr: self._delete_address_from_form(a),
+            ).pack(side="right")
+
+    def _edit_address_from_form(self, address):
+        AddressForm(self, customer=self.customer,
+                    on_save=lambda: self._build_address_list(), address=address)
+
+    def _delete_address_from_form(self, address):
+        parts = [p for p in [address.line1, address.line2, address.city] if p]
+        summary = ", ".join(parts) or "(empty)"
+        if not messagebox.askyesno(
+            "Delete Address",
+            f"Move this address to the Recycle Bin?\n\n{summary}",
+            parent=self,
+        ):
+            return
+        self.crm_service.delete_address(address.id)
+        self._build_address_list()
 
 
 class AddressForm(ctk.CTkToplevel):
