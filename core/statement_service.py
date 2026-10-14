@@ -99,6 +99,31 @@ class StatementService:
             if period_start <= (line["date"] or "")[:10] <= period_end:
                 lines.append(line)
 
+        # Payments received (logged in Accounting / Money Owing) as credits,
+        # so the statement balance reflects what has actually been paid.
+        from core.payment_repository import PaymentRepository
+        for payment in PaymentRepository().list_for_customer(customer_id):
+            if period_start <= (payment.date or "")[:10] <= period_end and payment.amount_minor:
+                reference = (payment.reference or "").strip()
+                if reference.upper().startswith("LEDGER:"):
+                    reference = "Bank deposit"
+                lines.append({
+                    "ref": reference or "Payment",
+                    "date": payment.date,
+                    "description": "Payment received",
+                    "amount_minor": -abs(payment.amount_minor),
+                    "document_id": "", "currency": "ZAR",
+                })
+
+        # Show who and which document, not the document type. The type is
+        # kept in "kind" so same-day lines still sort in workflow order.
+        customer = self.quote_documents.crm_service.get_customer(customer_id)             if hasattr(self.quote_documents, "crm_service") else None
+        name = getattr(customer, "name", "") or ""
+        for line in lines:
+            line["kind"] = line["description"]
+            if name and line["kind"] != "Payment received":
+                line["description"] = f"{name} - {line['ref']}"
+
         lines.sort(key=_statement_sort_key)
         return lines
 
@@ -130,6 +155,7 @@ _DESCRIPTION_ORDER = {
     "Tax Invoice (Deposit)": 2,
     "Tax Invoice": 3,
     "Tax Invoice (Balance)": 4,
+    "Payment received": 6,
 }
 
 
@@ -137,7 +163,7 @@ def _statement_sort_key(line):
     """Date first, then workflow order, then document number - so the order
     is chronological and, within one date, never arbitrary."""
 
-    description = line.get("description", "")
+    description = line.get("kind") or line.get("description", "")
     return (
         (line.get("date") or "")[:10],
         _DESCRIPTION_ORDER.get(description, 5),

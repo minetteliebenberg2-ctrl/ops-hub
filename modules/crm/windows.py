@@ -398,6 +398,12 @@ class CRMWindow(ctk.CTkFrame):
             fg_color=COLORS["surface_tertiary"], text_color=COLORS["text_primary"],
             border_width=1, border_color=COLORS["border_default"],
             command=lambda: self._add_address(customer),
+        ).pack(side="left", padx=(0, SPACING["sm"]))
+        ctk.CTkButton(
+            btn_col, text="Statement", font=FONTS["label"], height=30,
+            fg_color=COLORS["surface_tertiary"], text_color=COLORS["text_primary"],
+            border_width=1, border_color=COLORS["border_default"],
+            command=lambda: self._open_statement(customer),
         ).pack(side="left")
 
         # --- KPI cards row ---
@@ -566,13 +572,13 @@ class CRMWindow(ctk.CTkFrame):
             self._detail_tab_frames[tab_name] = frame
 
             btn = ctk.CTkButton(
-                tab_bar, text=tab_name, font=FONTS["body_sm"], height=36,
+                tab_bar, text=tab_name, font=("Lato", 11), height=32, width=70,
                 fg_color="transparent", text_color=COLORS["text_tertiary"],
                 hover_color=COLORS["surface_tertiary"], border_width=0,
                 corner_radius=0,
                 command=lambda n=tab_name: self._switch_detail_tab(n),
             )
-            btn.pack(side="left", padx=(SPACING["sm"], 0))
+            btn.pack(side="left", padx=(2, 0))
             self._detail_tab_buttons[tab_name] = btn
 
         self._switch_detail_tab("Activity")
@@ -591,12 +597,12 @@ class CRMWindow(ctk.CTkFrame):
             if n == name:
                 btn.configure(
                     text_color=COLORS["accent_primary"],
-                    font=("Lato", 12, "bold"),
+                    font=("Lato", 11, "bold"),
                 )
             else:
                 btn.configure(
                     text_color=COLORS["text_tertiary"],
-                    font=FONTS["body_sm"],
+                    font=("Lato", 11),
                 )
 
     # ==================================================
@@ -922,6 +928,13 @@ class CRMWindow(ctk.CTkFrame):
             self.winfo_toplevel(), qs, self.crm_service,
             BusinessSettingsService(), quote.id,
         )
+
+    def _open_statement(self, customer):
+        """Statement editor for this customer, pre-selected."""
+
+        from modules.quotes.windows import StatementEditorWindow
+
+        StatementEditorWindow(self.winfo_toplevel(), customer_id=customer.id)
 
     def _open_quote(self, quote):
         from core.business_settings_service import BusinessSettingsService
