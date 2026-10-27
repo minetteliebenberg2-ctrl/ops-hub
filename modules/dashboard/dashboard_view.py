@@ -323,18 +323,24 @@ class DashboardView(ctk.CTkFrame):
             self._active_letter = None
         else:
             self._active_letter = ch
+        self._update_letter_buttons()
+        self._picking_letter = True
+        self._client_search_var.set("")
+        self._picking_letter = False
+        self._show_client_results()
+
+    def _update_letter_buttons(self):
         for letter, btn in self._az_buttons.items():
             if letter == self._active_letter:
                 btn.configure(fg_color=COLORS["accent_primary"], text_color=COLORS["text_inverse"])
             else:
                 btn.configure(fg_color="transparent", text_color=COLORS["text_tertiary"])
-        self._client_search_var.set("")
-        self._show_client_results()
 
     def _filter_clients(self):
+        if getattr(self, "_picking_letter", False):
+            return
         self._active_letter = None
-        for btn in self._az_buttons.values():
-            btn.configure(fg_color="transparent", text_color=COLORS["text_tertiary"])
+        self._update_letter_buttons()
         self._show_client_results()
 
     def _show_client_results(self):

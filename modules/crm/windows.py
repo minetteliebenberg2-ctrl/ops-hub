@@ -405,6 +405,12 @@ class CRMWindow(ctk.CTkFrame):
             border_width=1, border_color=COLORS["border_default"],
             command=lambda: self._open_statement(customer),
         ).pack(side="left")
+        ctk.CTkButton(
+            btn_col, text="Merge", font=FONTS["label"], height=30, width=70,
+            fg_color=COLORS["surface_tertiary"], text_color=COLORS["text_primary"],
+            border_width=1, border_color=COLORS["border_default"],
+            command=lambda: self._merge_customer(customer),
+        ).pack(side="left", padx=(SPACING["sm"], 0))
 
         # --- KPI cards row ---
         kpi_frame = ctk.CTkFrame(scroll, fg_color="transparent")
@@ -947,6 +953,39 @@ class CRMWindow(ctk.CTkFrame):
             BusinessSettingsService(),
             quote.id,
         )
+
+    def _merge_customer(self, customer):
+        """Merge another customer's records into this one."""
+        all_customers = self.crm_service.list_customers()
+        others = [c for c in all_customers if c.id != customer.id]
+        if not others:
+            messagebox.showinfo(
+                "Merge", "There are no other customers to merge.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        dialog = _MergePickerDialog(
+            self.winfo_toplevel(), customer, others, self._do_merge,
+        )
+        dialog.focus_force()
+
+    def _do_merge(self, source, target):
+        from core.customer_merge import merge_customers
+        from core.database import database
+
+        summary = merge_customers(database, source.id, target.id, self._actor())
+        total = sum(summary.values())
+        messagebox.showinfo(
+            "Merge Complete",
+            f"Merged {source.name} into {target.name}.\n\n"
+            f"{total} record{'s' if total != 1 else ''} moved.\n"
+            f"Document numbers updated to {target.customer_number.split('-')[0]}- prefix.\n\n"
+            f"{source.name} has been moved to the Recycle Bin.",
+            parent=self.winfo_toplevel(),
+        )
+        self._show_list_view()
+        self._refresh_list()
 
     def _actor(self):
         try:
@@ -1592,3 +1631,79 @@ class AddressForm(ctk.CTkToplevel):
         if self.on_save:
             self.on_save(saved)
         self.destroy()
+
+
+class _MergePickerDialog(ctk.CTkToplevel):
+    """Pick which customer to merge INTO the target."""
+
+    def __init__(self, parent, target, others, on_merge):
+        super().__init__(parent)
+        self.title(f"Merge into {target.name}")
+        self.geometry("420x480")
+        self._target = target
+        self._others = others
+        self._on_merge = on_merge
+        self._filtered = list(others)
+
+        self.after(100, lambda: self.attributes("-topmost", True))
+        self.after(300, lambda: self.attributes("-topmost", False))
+
+        ctk.CTkLabel(
+            self, text=f"Merge another customer into\n{target.name} ({target.customer_number})",
+            font=FONTS["body"], wraplength=380,
+        ).pack(padx=16, pady=(16, 8))
+
+        ctk.CTkLabel(
+            self, text="All records from the selected customer will be\n"
+            "moved here and their document numbers updated.",
+            font=FONTS["body_sm"], text_color=COLORS["text_secondary"],
+            wraplength=380,
+        ).pack(padx=16, pady=(0, 8))
+
+        self._search_var = ctk.StringVar()
+        self._search_var.trace_add("write", lambda *_: self._filter())
+        ctk.CTkEntry(
+            self, textvariable=self._search_var, placeholder_text="Search...",
+            font=FONTS["body"], height=32,
+        ).pack(fill="x", padx=16, pady=(0, 8))
+
+        self._list_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self._list_frame.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        self._build_list()
+
+    def _filter(self):
+        q = self._search_var.get().lower()
+        self._filtered = [c for c in self._others if q in c.name.lower()] if q else list(self._others)
+        self._build_list()
+
+    def _build_list(self):
+        for w in self._list_frame.winfo_children():
+            w.destroy()
+        for c in self._filtered:
+            btn = ctk.CTkButton(
+                self._list_frame,
+                text=f"{c.customer_number}  —  {c.name}",
+                font=FONTS["body"], height=36, anchor="w",
+                fg_color=COLORS["surface_tertiary"],
+                text_color=COLORS["text_primary"],
+                hover_color=COLORS["accent_primary"],
+                command=lambda cust=c: self._pick(cust),
+            )
+            btn.pack(fill="x", pady=2)
+
+    def _pick(self, source):
+        if not messagebox.askyesno(
+            "Confirm Merge",
+            f"Merge {source.name} ({source.customer_number}) "
+            f"into {self._target.name} ({self._target.customer_number})?\n\n"
+            f"All quotes, invoices, job cards, contacts, sites and photos "
+            f"from {source.name} will move to {self._target.name}.\n\n"
+            f"Document numbers will be updated from "
+            f"{source.customer_number.split('-')[0]}- to "
+            f"{self._target.customer_number.split('-')[0]}-.\n\n"
+            f"{source.name} will go to the Recycle Bin.",
+            parent=self,
+        ):
+            return
+        self.destroy()
+        self._on_merge(source, self._target)
