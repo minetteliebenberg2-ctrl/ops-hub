@@ -1747,7 +1747,7 @@ class _DuplicateChoiceDialog(ctk.CTkToplevel):
         self.result = "skip"
         self.title("Duplicate Item")
         self.geometry("420x220")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.transient(master)
         self.grab_set()
 

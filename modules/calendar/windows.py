@@ -38,7 +38,7 @@ class CalendarHub(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Calendar Hub")
         self.geometry("500x420")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
 
         ctk.CTkLabel(self, text="Calendar Hub", font=("Segoe UI", 24, "bold"),
@@ -300,7 +300,7 @@ class NewScheduledJobDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Schedule New Job")
         self.geometry("460x450")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
         self.transient(parent)
 
@@ -385,7 +385,7 @@ class EditScheduledJobDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title(f"Edit — {job.title}")
         self.geometry("460x500")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
         self.transient(parent)
 

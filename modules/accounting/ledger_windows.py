@@ -2445,7 +2445,7 @@ class DateRangeDialog(ctk.CTkToplevel):
 
         self.title("Select Date Range")
         self.geometry("340x220")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
         self.transient(parent)
         self.grab_set()

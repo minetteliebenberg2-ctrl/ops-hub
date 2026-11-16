@@ -39,11 +39,11 @@ class QuoteRepository:
                     vat_minor, total_minor, po_number, vat_number,
                     registration_number, bill_to_name,
                     print_billing_address, print_delivery_address, print_postal_address, split_invoice,
-                    notes,
+                    plain_invoice, notes,
                     revision_of_quote_id, revision_number,
                     created_at, updated_at, created_by, updated_by
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     site_id = excluded.site_id,
                     expiry_date = excluded.expiry_date,
@@ -61,6 +61,7 @@ class QuoteRepository:
                     print_delivery_address = excluded.print_delivery_address,
                     print_postal_address = excluded.print_postal_address,
                     split_invoice = excluded.split_invoice,
+                    plain_invoice = excluded.plain_invoice,
                     notes = excluded.notes,
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by
@@ -88,6 +89,7 @@ class QuoteRepository:
                     int(quote.print_delivery_address),
                     int(quote.print_postal_address),
                     int(quote.split_invoice),
+                    int(quote.plain_invoice),
                     quote.notes,
                     quote.revision_of_quote_id or None,
                     quote.revision_number,
@@ -225,11 +227,11 @@ class QuoteRepository:
                     issue_date, expiry_date, currency, payment_terms_snapshot,
                     deposit_percentage, balance_percentage, subtotal_minor,
                     vat_minor, total_minor, po_number, vat_number,
-                    registration_number, bill_to_name, split_invoice, notes,
+                    registration_number, bill_to_name, split_invoice, plain_invoice, notes,
                     revision_of_quote_id, revision_number,
                     created_at, updated_at, created_by, updated_by
                 )
-                VALUES (?, ?, ?, ?, 'Draft', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, 'Draft', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     new_id, original["quote_number"], original["customer_id"], original["site_id"],
@@ -239,6 +241,7 @@ class QuoteRepository:
                     original["po_number"], original["vat_number"], original["registration_number"],
                     original["bill_to_name"],
                     original["split_invoice"] if "split_invoice" in original.keys() else 0,
+                    original["plain_invoice"] if "plain_invoice" in original.keys() else 0,
                     original["notes"],
                     original["id"], next_revision,
                     now, now, actor, actor,
@@ -378,6 +381,7 @@ class QuoteRepository:
             print_delivery_address=bool(row["print_delivery_address"]) if "print_delivery_address" in row.keys() else False,
             print_postal_address=bool(row["print_postal_address"]) if "print_postal_address" in row.keys() else False,
             split_invoice=bool(row["split_invoice"]) if "split_invoice" in row.keys() else False,
+            plain_invoice=bool(row["plain_invoice"]) if "plain_invoice" in row.keys() else False,
             notes=row["notes"],
             revision_of_quote_id=row["revision_of_quote_id"] or "",
             revision_number=row["revision_number"],

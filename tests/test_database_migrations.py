@@ -124,6 +124,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     (56, "document_category_picklist"),
                     (57, "split_invoice"),
                     (58, "deposit_percent_setting"),
+                    (59, "plain_invoice"),
                 ],
             )
             self.assertEqual(user_version, MigrationRunner(database).latest_version)
@@ -447,6 +448,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     "document_category_picklist",
                     "split_invoice",
                     "deposit_percent_setting",
+                    "plain_invoice",
                 ],
             )
 

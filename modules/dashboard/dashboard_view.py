@@ -662,7 +662,7 @@ class AddContactDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Add Contact Person")
         self.geometry("420x480")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.crm_service = crm_service
         self._customers = sorted(customers, key=lambda c: c.name or "")
 

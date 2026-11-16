@@ -341,6 +341,14 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         ctk.CTkButton(doc_row, text="Dates...", command=self.edit_dates, width=90).pack(side="left", padx=4)
 
 
+        self._plain_invoice_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            doc_row, text="Invoice (no Tax)",
+            variable=self._plain_invoice_var,
+            command=self._save_plain_invoice,
+            width=140,
+        ).pack(side="right", padx=(4, 8))
+
         self._split_invoice_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             doc_row, text="Split deposit / balance",
@@ -418,6 +426,7 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         self.bill_to_entry.delete(0, "end")
         self.bill_to_entry.insert(0, quote.bill_to_name or (customer.name if customer else ""))
         self._split_invoice_var.set(quote.split_invoice)
+        self._plain_invoice_var.set(quote.plain_invoice)
         self._show_invoice_buttons(quote.split_invoice)
 
         self._editable = quote.status == "Draft"
@@ -815,6 +824,14 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         self.quote_service.save_quote(quote, current_actor())
         self.refresh()
 
+    def _save_plain_invoice(self):
+
+        quote = self.quote_service.get_quote(self.quote_id)
+        if quote is None:
+            return
+        quote.plain_invoice = self._plain_invoice_var.get()
+        self.quote_service.save_quote(quote, current_actor())
+
     def _save_split_invoice(self):
 
         quote = self.quote_service.get_quote(self.quote_id)
@@ -1095,6 +1112,10 @@ class QuoteDetailWindow(ctk.CTkToplevel):
         if getattr(document, "invoice_part", "") == "balance":
             extra["deposit_document"] = self.quote_documents.deposit_invoice_for_quote(self.quote_id)
 
+        from core.business_document_pdf import generate_invoice_pdf
+        if pdf_builder == generate_invoice_pdf and quote.plain_invoice:
+            extra["plain_invoice"] = True
+
         def build(output_path):
             pdf_builder(
                 document, quote, line_items, customer, site, business, output_path,
@@ -1344,7 +1365,7 @@ class _DatePromptDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title(title)
         self.geometry("420x190")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.result = None
 
         ctk.CTkLabel(self, text=prompt, justify="left", wraplength=380).pack(

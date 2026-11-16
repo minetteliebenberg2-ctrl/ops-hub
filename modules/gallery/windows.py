@@ -117,7 +117,7 @@ class GalleryHub(ctk.CTkToplevel):
 
         self.title("Gallery Hub")
         self.geometry("500x420")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
 
         ctk.CTkLabel(
@@ -547,7 +547,7 @@ class BulkTagDialog(ctk.CTkToplevel):
         super().__init__(parent.winfo_toplevel())
         self.title("Tag Selected Photos")
         self.geometry("420x220")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
 
         self.images = images
@@ -602,7 +602,7 @@ class EditPhotoDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Edit Photo")
         self.geometry("420x320")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
 
         self.image = image

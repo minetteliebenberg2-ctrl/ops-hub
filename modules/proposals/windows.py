@@ -143,7 +143,7 @@ class ProposalsHub(ctk.CTkToplevel):
 
         self.title("Proposals Hub")
         self.geometry("500x420")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
 
         ctk.CTkLabel(

@@ -46,6 +46,7 @@ LOGO_PATH = get_assets_dir() / "logo_placeholder.png"
 DOCUMENT_TITLES = {
     PRO_FORMA: "PRO FORMA INVOICE",
     TAX_INVOICE: "TAX INVOICE",
+    "Invoice": "INVOICE",
 }
 
 
@@ -184,13 +185,14 @@ def generate_proforma_pdf(document, quote, line_items, customer, site, business_
     )
 
 
-def generate_invoice_pdf(document, quote, line_items, customer, site, business_settings, output_path, billing_address=None, site_address=None, delivery_address=None, postal_address=None, contact_name=None, deposit_document=None):
+def generate_invoice_pdf(document, quote, line_items, customer, site, business_settings, output_path, billing_address=None, site_address=None, delivery_address=None, postal_address=None, contact_name=None, deposit_document=None, plain_invoice=False):
     """Tax Invoice. document.invoice_part selects the variant:
     '' = normal, 'deposit' = one '<n>% deposit on <quote>' line,
     'balance' = all quote items + full total, less the deposit invoice,
     balance due. deposit_document names the deposit on a balance invoice."""
+    doc_type = "Invoice" if plain_invoice else TAX_INVOICE
     return _generate_quote_derived_pdf(
-        TAX_INVOICE, document, quote, line_items, customer, site, business_settings, output_path,
+        doc_type, document, quote, line_items, customer, site, business_settings, output_path,
         billing_address=billing_address, site_address=site_address, delivery_address=delivery_address, postal_address=postal_address, contact_name=contact_name,
         deposit_document=deposit_document,
     )
@@ -269,7 +271,7 @@ def _generate_quote_derived_pdf(doc_type, document, quote, line_items, customer,
         [Paragraph("DATE", styles["meta_label"]), Paragraph(document.issue_date or "—", styles["meta_value"])],
         [Paragraph("QUOTE REF", styles["meta_label"]), Paragraph(format_quote_number(quote), styles["meta_value"])],
     ]
-    if doc_type == TAX_INVOICE:
+    if doc_type in (TAX_INVOICE, "Invoice"):
         meta_rows.append([Paragraph("DUE DATE", styles["meta_label"]), Paragraph(document.due_date or "—", styles["meta_value"])])
     meta_rows.append([Paragraph("PO NUMBER", styles["meta_label"]), Paragraph(resolved_or_tbc(document.po_number), styles["meta_value"])])
     meta_rows.append([Paragraph("VAT NO", styles["meta_label"]), Paragraph(resolved_or_tbc(document.vat_number), styles["meta_value"])])

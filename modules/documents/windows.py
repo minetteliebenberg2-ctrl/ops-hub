@@ -320,7 +320,7 @@ class DocumentDetailsDialog(ctk.CTkToplevel):
         super().__init__(master)
         self.title(title)
         self.geometry("460x360")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.result = None
         self.picklists = picklists or PicklistService()
 

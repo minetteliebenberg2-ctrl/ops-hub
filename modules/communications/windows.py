@@ -57,7 +57,7 @@ class CommunicationsHub(ctk.CTkToplevel):
 
         self.title("Communications Hub")
         self.geometry("480x400")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=THEME_DARK_GREY)
 
         ctk.CTkLabel(

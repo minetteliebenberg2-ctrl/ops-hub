@@ -1210,7 +1210,7 @@ class CustomerForm(ctk.CTkToplevel):
 
         self.title("New Customer" if mode == "create" else f"Edit {customer.name}")
         self.geometry("560x640")
-        self.resizable(False, False)
+        self.resizable(True, True)
 
         # Configure
         self.configure(fg_color=COLORS["surface_primary"])
@@ -1516,7 +1516,7 @@ class AddressForm(ctk.CTkToplevel):
 
         self.title(f"New Address — {customer.name}")
         self.geometry("520x560")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(fg_color=COLORS["surface_primary"])
 
         self._build_form()
