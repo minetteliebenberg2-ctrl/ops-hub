@@ -246,8 +246,8 @@ class DashboardView(ctk.CTkFrame):
             text_color=COLORS["text_tertiary"],
         ).pack(anchor="w")
 
-        # Overdue Invoices (bottom-left)
-        self._overdue_card = self._card_shell(grid, "Overdue Invoices", 1, 0)
+        # Outstanding Invoices (middle-left)
+        self._overdue_card = self._card_shell(grid, "Outstanding Invoices", 1, 0)
         self._overdue_content = ctk.CTkFrame(self._overdue_card, fg_color="transparent")
         self._overdue_content.pack(fill="both", expand=True)
         ctk.CTkLabel(
@@ -255,7 +255,7 @@ class DashboardView(ctk.CTkFrame):
             text_color=COLORS["text_tertiary"],
         ).pack(anchor="w")
 
-        # Recent Activity (bottom-right)
+        # Recent Activity (middle-right)
         self._activity_card = self._card_shell(grid, "Recent Activity", 1, 1)
         self._activity_content = ctk.CTkFrame(self._activity_card, fg_color="transparent")
         self._activity_content.pack(fill="both", expand=True)
@@ -264,14 +264,23 @@ class DashboardView(ctk.CTkFrame):
             text_color=COLORS["text_tertiary"],
         ).pack(anchor="w")
 
-    def _card_shell(self, parent, title, row, col):
+        # Recent Documents (full width, bottom)
+        self._documents_card = self._card_shell(grid, "Recent Documents", 2, 0, span=2)
+        self._documents_content = ctk.CTkFrame(self._documents_card, fg_color="transparent")
+        self._documents_content.pack(fill="both", expand=True)
+        ctk.CTkLabel(
+            self._documents_content, text="Loading...", font=FONTS["body_sm"],
+            text_color=COLORS["text_tertiary"],
+        ).pack(anchor="w")
+
+    def _card_shell(self, parent, title, row, col, span=1):
         card = ctk.CTkFrame(
             parent, fg_color=COLORS["surface_secondary"],
             border_width=1, border_color=COLORS["border_default"], corner_radius=6,
         )
-        card.grid(row=row, column=col, sticky="nsew",
-                  padx=(0, SPACING["sm"] if col == 0 else 0),
-                  pady=(0, SPACING["sm"] if row == 0 else 0))
+        card.grid(row=row, column=col, columnspan=span, sticky="nsew",
+                  padx=(0, SPACING["sm"] if col == 0 and span == 1 else 0),
+                  pady=(0, SPACING["sm"] if row < 2 else 0))
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="both", expand=True, padx=SPACING["md"], pady=SPACING["md"])
         ctk.CTkLabel(
@@ -537,14 +546,14 @@ class DashboardView(ctk.CTkFrame):
         except Exception:
             pass
 
-        # Overdue invoices
+        # Outstanding invoices - everything still owed, worst first.
         try:
             for w in self._overdue_content.winfo_children():
                 w.destroy()
-            overdue = data.get("overdue_invoices", [])
+            overdue = data.get("outstanding_invoices") or data.get("overdue_invoices", [])
             if not overdue:
                 ctk.CTkLabel(
-                    self._overdue_content, text="No overdue invoices.",
+                    self._overdue_content, text="Nothing outstanding.",
                     font=FONTS["body_sm"], text_color=COLORS["text_tertiary"],
                 ).pack(anchor="w")
             else:
@@ -555,9 +564,12 @@ class DashboardView(ctk.CTkFrame):
                         row, text=inv["invoice_number"] or "—",
                         font=FONTS["heading_sm"], text_color=COLORS["text_primary"],
                     ).pack(side="left")
+                    late = inv.get("days_overdue", 0) > 0
                     ctk.CTkLabel(
-                        row, text=f"{inv['days_overdue']}d",
-                        font=FONTS["label_sm"], text_color=COLORS["danger"],
+                        row,
+                        text=inv.get("due_label") or f"{inv.get('days_overdue', 0)}d",
+                        font=FONTS["label_sm"],
+                        text_color=COLORS["danger"] if late else COLORS["text_tertiary"],
                     ).pack(side="left", padx=(SPACING["sm"], 0))
                     ctk.CTkLabel(
                         row, text=inv["customer"], font=FONTS["body_sm"],
@@ -568,6 +580,42 @@ class DashboardView(ctk.CTkFrame):
                         text_color=COLORS["text_primary"],
                     ).pack(side="right")
                     ctk.CTkFrame(self._overdue_content, fg_color=COLORS["border_light"], height=1).pack(fill="x")
+        except Exception:
+            pass
+
+        # Recent documents
+        try:
+            for w in self._documents_content.winfo_children():
+                w.destroy()
+            documents = data.get("recent_documents", [])
+            if not documents:
+                ctk.CTkLabel(
+                    self._documents_content, text="No documents generated yet.",
+                    font=FONTS["body_sm"], text_color=COLORS["text_tertiary"],
+                ).pack(anchor="w")
+            else:
+                for doc in documents:
+                    row = ctk.CTkFrame(self._documents_content, fg_color="transparent")
+                    row.pack(fill="x", pady=(0, 2))
+                    ctk.CTkLabel(
+                        row, text=doc["number"] or "—",
+                        font=FONTS["heading_sm"], text_color=COLORS["text_primary"],
+                    ).pack(side="left")
+                    ctk.CTkLabel(
+                        row, text=doc["kind"], font=FONTS["label_sm"],
+                        text_color=COLORS["text_tertiary"],
+                    ).pack(side="left", padx=(SPACING["sm"], 0))
+                    ctk.CTkLabel(
+                        row, text=doc["customer"], font=FONTS["body_sm"],
+                        text_color=COLORS["text_secondary"],
+                    ).pack(side="left", padx=(SPACING["sm"], 0))
+                    ctk.CTkLabel(
+                        row, text=doc["date"] or "—", font=FONTS["body_sm"],
+                        text_color=COLORS["text_tertiary"],
+                    ).pack(side="right")
+                    ctk.CTkFrame(
+                        self._documents_content, fg_color=COLORS["border_light"], height=1,
+                    ).pack(fill="x")
         except Exception:
             pass
 

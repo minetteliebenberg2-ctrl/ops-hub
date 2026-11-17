@@ -18,6 +18,10 @@ from core.business_settings_service import BusinessSettingsService
 from core.ledger_service import EXPENSE, INCOME, LedgerService
 from core.picklist_service import CUSTOMER_TYPE, DOCUMENT_CATEGORY, LINE_ITEM_TYPE, PAYMENT_TERMS, PicklistService
 from core.job_cost_item import COST_BUCKETS, JobCostItem, JobCostItemRepository
+from core.tax_return_date import (
+    PERIODS as TAX_PERIODS, TaxReturnDate, TaxReturnDateRepository,
+    default_due_date, parse_amount,
+)
 from core.supplier_pricing_repository import CATEGORIES as SUPPLIER_PRICE_CATEGORIES
 from core.supplier_pricing_service import SupplierPricingService
 from gui.entity_table import build_entity_table
@@ -47,6 +51,7 @@ class SettingsWindow(ctk.CTkFrame):
         self.supplier_pricing = SupplierPricingService()
         self.supplier_price_category = SUPPLIER_PRICE_CATEGORIES[0]
         self.job_cost_repo = JobCostItemRepository()
+        self.tax_return_repo = TaxReturnDateRepository()
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -65,6 +70,7 @@ class SettingsWindow(ctk.CTkFrame):
         self._build_job_costing_tab()
         self._build_ledger_categories_tab()
         self._build_supplier_pricing_tab()
+        self._build_tax_returns_tab()
         self._build_appearance_tab()
 
         self.refresh()
@@ -297,6 +303,152 @@ class SettingsWindow(ctk.CTkFrame):
         self._load_job_cost_items()
         self._load_ledger_categories()
         self._load_supplier_price_items()
+        self._load_tax_returns()
+
+    # --------------------------------------------------
+    # Tax return dates
+    # --------------------------------------------------
+
+    def _build_tax_returns_tab(self):
+
+        tab = self.tabs.add("Tax Returns")
+        self.tax_returns_table = build_entity_table(
+            tab,
+            ("Period", "Due", "Submitted", "Amount", "Paid", "Status"),
+            (
+                ("Refresh", self.refresh),
+                ("Add Date", self.new_tax_return),
+                ("Add Full Year", self.add_tax_year),
+                ("Edit", self.edit_tax_return),
+                ("Delete", self.delete_tax_return),
+            ),
+        )
+        self.tax_returns_table.heading("#0", text="Tax Year")
+
+    def _selected_tax_return(self):
+
+        selection = self.tax_returns_table.selection()
+        if not selection:
+            messagebox.showwarning("Tax Returns", "Select a row first.", parent=self.winfo_toplevel())
+            return None
+        return self.tax_return_repo.get(selection[0])
+
+    def _tax_return_fields(self, record):
+
+        return [
+            {"key": "tax_year", "label": "Tax Year (e.g. 2027)", "kind": "text", "initial": record.tax_year},
+            {"key": "period", "label": "Period", "kind": "dropdown",
+             "options": list(TAX_PERIODS), "initial": record.period or TAX_PERIODS[0]},
+            {"key": "due_date", "label": "Due Date", "kind": "date", "initial": record.due_date},
+            {"key": "submitted_date", "label": "Date Submitted (blank until filed)",
+             "kind": "date", "initial": record.submitted_date},
+            {"key": "amount", "label": "Amount (R)", "kind": "text",
+             "initial": f"{record.amount:.2f}" if record.amount else ""},
+            {"key": "paid", "label": "Paid", "kind": "checkbox", "initial": record.paid},
+            {"key": "notes", "label": "Notes", "kind": "textarea", "initial": record.notes},
+        ]
+
+    def new_tax_return(self):
+
+        self._open_tax_return_dialog(TaxReturnDate(), "Add Tax Return Date")
+
+    def edit_tax_return(self):
+
+        record = self._selected_tax_return()
+        if record is None:
+            return
+        self._open_tax_return_dialog(record, f"Edit — {record.tax_year} {record.period}")
+
+    def _open_tax_return_dialog(self, record, title):
+
+        result = EntityFormDialog.ask(self.winfo_toplevel(), title, self._tax_return_fields(record))
+        if result is None:
+            return
+
+        record.tax_year = (result["tax_year"] or "").strip()
+        record.period = result["period"]
+        record.due_date = (result["due_date"] or "").strip()
+        record.submitted_date = (result["submitted_date"] or "").strip()
+        record.notes = (result["notes"] or "").strip()
+        record.paid = bool(result["paid"])
+
+        try:
+            record.amount = parse_amount(result["amount"])
+        except ValueError:
+            messagebox.showerror("Tax Returns", f"'{result['amount']}' is not an amount.",
+                                 parent=self.winfo_toplevel())
+            return
+
+        if not record.tax_year:
+            messagebox.showerror("Tax Returns", "Enter a tax year.", parent=self.winfo_toplevel())
+            return
+        if not record.due_date:
+            record.due_date = default_due_date(record.tax_year, record.period)
+
+        self.tax_return_repo.save(record)
+        self.refresh()
+
+    def add_tax_year(self):
+
+        result = EntityFormDialog.ask(
+            self.winfo_toplevel(), "Add Full Tax Year",
+            [{"key": "tax_year", "label": "Tax Year (e.g. 2027)", "kind": "text", "initial": ""}],
+        )
+        if result is None:
+            return
+        year = (result["tax_year"] or "").strip()
+        if not year:
+            return
+
+        existing = {(r.tax_year, r.period) for r in self.tax_return_repo.list_all()}
+        added = 0
+        for period in TAX_PERIODS:
+            if (year, period) in existing:
+                continue
+            self.tax_return_repo.save(TaxReturnDate(
+                tax_year=year, period=period, due_date=default_due_date(year, period),
+            ))
+            added += 1
+        self.refresh()
+        messagebox.showinfo(
+            "Tax Returns",
+            f"Added {added} date(s) for {year}."
+            if added else f"{year} already has all three periods on file.",
+            parent=self.winfo_toplevel(),
+        )
+
+    def delete_tax_return(self):
+
+        record = self._selected_tax_return()
+        if record is None:
+            return
+        if not messagebox.askyesno(
+            "Delete Tax Return Date",
+            f"Delete {record.tax_year} — {record.period}?",
+            parent=self.winfo_toplevel(),
+        ):
+            return
+        self.tax_return_repo.delete(record.id)
+        self.refresh()
+
+    def _load_tax_returns(self):
+
+        self.tax_returns_table.delete(*self.tax_returns_table.get_children())
+        for record in self.tax_return_repo.list_all():
+            self.tax_returns_table.insert(
+                "",
+                "end",
+                iid=record.id,
+                text=record.tax_year,
+                values=(
+                    record.period,
+                    record.due_date or "—",
+                    record.submitted_date or "—",
+                    f"R {record.amount:,.2f}" if record.amount else "—",
+                    "Yes" if record.paid else "No",
+                    record.status,
+                ),
+            )
 
     # --------------------------------------------------
     # Payment terms (with real deposit/balance percentages)

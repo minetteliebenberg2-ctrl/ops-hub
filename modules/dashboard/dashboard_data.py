@@ -237,6 +237,78 @@ class DashboardData:
 
     # --------------------------------------------------
 
+    def get_outstanding_invoices(self, limit=5):
+        """Every Tax Invoice with money still owed, not just the overdue
+        ones - oldest due date first."""
+        try:
+            customers_by_id = {c.id: c for c in self.crm_service.list_customers()}
+            rows = []
+            for entry in self.payment_service.list_invoices_with_status():
+                if entry["balance_minor"] <= 0:
+                    continue
+                invoice = entry["document"]
+                customer = customers_by_id.get(invoice.customer_id)
+                overdue = entry["days_overdue"]
+                rows.append(
+                    {
+                        "invoice_number": invoice.document_number,
+                        "customer": customer.name if customer else "Unknown",
+                        "amount": f"R {entry['balance_minor'] / 100:,.2f}",
+                        "due_label": f"{overdue}d overdue" if overdue > 0 else (
+                            f"due {invoice.due_date}" if getattr(invoice, "due_date", "") else "due"
+                        ),
+                        "days_overdue": overdue,
+                    }
+                )
+            rows.sort(key=lambda row: -row["days_overdue"])
+            return rows[:limit]
+        except Exception as e:
+            print(f"Error getting outstanding invoices: {e}")
+            return []
+
+    # --------------------------------------------------
+
+    def get_recent_documents(self, limit=6):
+        """The last documents generated - quotes, pro-formas, invoices -
+        newest first."""
+        try:
+            from core.quote_document_repository import QuoteDocumentRepository
+
+            customers_by_id = {c.id: c for c in self.crm_service.list_customers()}
+            rows = []
+
+            for document in QuoteDocumentRepository().list_all():
+                customer = customers_by_id.get(document.customer_id)
+                rows.append(
+                    {
+                        "number": document.document_number,
+                        "kind": document.doc_type or "Document",
+                        "customer": customer.name if customer else "Unknown",
+                        "date": (document.issue_date or document.created_at or "")[:10],
+                    }
+                )
+
+            for quote in self.quote_service.list_quotes():
+                if quote.archived_at or not quote.quote_number:
+                    continue
+                customer = customers_by_id.get(quote.customer_id)
+                rows.append(
+                    {
+                        "number": format_quote_number(quote),
+                        "kind": "Quote",
+                        "customer": customer.name if customer else "Unknown",
+                        "date": (quote.issue_date or quote.created_at or "")[:10],
+                    }
+                )
+
+            rows.sort(key=lambda row: row["date"], reverse=True)
+            return rows[:limit]
+        except Exception as e:
+            print(f"Error getting recent documents: {e}")
+            return []
+
+    # --------------------------------------------------
+
     def get_stale_quotes(self, limit=5):
         """Issued quotes that are expiring soon or already past their
         expiry date, with no decision recorded yet (still "Issued", not
@@ -374,6 +446,8 @@ class DashboardData:
             data = {
                 "upcoming_visits": self.get_upcoming_site_visits(),
                 "overdue_invoices": self.get_overdue_invoices(),
+                "outstanding_invoices": self.get_outstanding_invoices(),
+                "recent_documents": self.get_recent_documents(),
                 "stale_quotes": self.get_stale_quotes(),
             }
             callback(data)

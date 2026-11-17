@@ -125,6 +125,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     (57, "split_invoice"),
                     (58, "deposit_percent_setting"),
                     (59, "plain_invoice"),
+                    (60, "tax_return_dates"),
                 ],
             )
             self.assertEqual(user_version, MigrationRunner(database).latest_version)
@@ -449,6 +450,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     "split_invoice",
                     "deposit_percent_setting",
                     "plain_invoice",
+                    "tax_return_dates",
                 ],
             )
 
