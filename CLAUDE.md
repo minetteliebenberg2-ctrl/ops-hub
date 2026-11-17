@@ -306,3 +306,9 @@ Settings, Backup), all shared GUI/framework code, migration history up to the po
 **Next session should start with:** configure business identity (name, VAT status, reg number,
 logo, brand colour), decide on document numbering scheme, and confirm the app launches clean
 against a brand-new empty database.
+
+---
+
+### 2026-11-17 (port from FC Hub)
+
+Tax return dates (v0060, applied to app.db), dashboard Outstanding Invoices + Recent Documents, accounting parity confirmed. Migration tests updated for v60. Committed `9dd657a`, pushed. Exe not rebuilt. Scope: accounting, dashboard, tax dates only.
