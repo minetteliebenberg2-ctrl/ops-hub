@@ -106,6 +106,11 @@ TRANSFER_LIKE_CATEGORIES = {
     "Loan repayment",
     "Director's Loan to Company",
     "Director's Loan Repayment",
+    # Owner-loan categories — money moving between her and the business,
+    # not real income or expense.  Bug 5 from 2026-10-01.
+    "Share Holders/ Directors/ Members Loans",
+    "Loans (Private) From:",
+    "Loans (Private) To / (From):",
 }
 
 # Auto-categorization rules for bank-statement imports.

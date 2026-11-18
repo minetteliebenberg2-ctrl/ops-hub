@@ -380,8 +380,8 @@ class CRMWindow(ctk.CTkFrame):
         ).pack(anchor="w", pady=(2, 0))
 
         # Action buttons
-        btn_col = ctk.CTkFrame(header_inner, fg_color="transparent")
-        btn_col.pack(side="right")
+        btn_col = ctk.CTkFrame(info_col, fg_color="transparent")
+        btn_col.pack(anchor="w", pady=(SPACING["sm"], 0))
         ctk.CTkButton(
             btn_col, text="Edit", font=FONTS["label"], height=30,
             fg_color=COLORS["accent_primary"], text_color=COLORS["text_inverse"],
