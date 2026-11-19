@@ -126,6 +126,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     (58, "deposit_percent_setting"),
                     (59, "plain_invoice"),
                     (60, "tax_return_dates"),
+                    (61, "job_cost_quote_id"),
                 ],
             )
             self.assertEqual(user_version, MigrationRunner(database).latest_version)
@@ -451,6 +452,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                     "deposit_percent_setting",
                     "plain_invoice",
                     "tax_return_dates",
+                    "job_cost_quote_id",
                 ],
             )
 

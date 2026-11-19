@@ -12,6 +12,7 @@ EXPENSE = "Expense"
 class JobCostAllocation:
     id: str = ""
     job_card_id: str = ""
+    quote_id: str = ""
     ledger_transaction_id: str = ""
     allocation_type: str = ""
     description: str = ""
@@ -38,13 +39,14 @@ class JobCostAllocationRepository:
         with self.db.connect() as conn:
             conn.execute(
                 """INSERT INTO job_cost_allocations
-                   (id, job_card_id, ledger_transaction_id, allocation_type,
+                   (id, job_card_id, quote_id, ledger_transaction_id, allocation_type,
                     description, amount_minor, cost_bucket, date, notes,
                     created_at, created_by)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(id) DO UPDATE SET
                     description=?, amount_minor=?, cost_bucket=?, date=?, notes=?""",
-                (alloc.id, alloc.job_card_id, alloc.ledger_transaction_id or None,
+                (alloc.id, alloc.job_card_id or None, alloc.quote_id or None,
+                 alloc.ledger_transaction_id or None,
                  alloc.allocation_type, alloc.description, alloc.amount_minor,
                  alloc.cost_bucket, alloc.date, alloc.notes,
                  alloc.created_at, alloc.created_by,
@@ -58,6 +60,14 @@ class JobCostAllocationRepository:
             rows = conn.execute(
                 "SELECT * FROM job_cost_allocations WHERE job_card_id=? ORDER BY date, created_at",
                 (job_card_id,),
+            ).fetchall()
+        return [self._to(r) for r in rows]
+
+    def list_for_quote(self, quote_id):
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM job_cost_allocations WHERE quote_id=? ORDER BY date, created_at",
+                (quote_id,),
             ).fetchall()
         return [self._to(r) for r in rows]
 
@@ -75,15 +85,19 @@ class JobCostAllocationRepository:
                    GROUP BY allocation_type, cost_bucket""",
                 (job_card_id,),
             ).fetchall()
-        income = 0
-        expenses = {}
-        for r in rows:
-            if r["allocation_type"] == INCOME:
-                income += r["total"]
-            else:
-                bucket = r["cost_bucket"] or "other"
-                expenses[bucket] = expenses.get(bucket, 0) + r["total"]
-        return income, expenses
+        return self._summarise_rows(rows)
+
+    def summary_for_quote(self, quote_id):
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """SELECT allocation_type, cost_bucket,
+                          SUM(amount_minor) as total
+                   FROM job_cost_allocations
+                   WHERE quote_id=?
+                   GROUP BY allocation_type, cost_bucket""",
+                (quote_id,),
+            ).fetchall()
+        return self._summarise_rows(rows)
 
     def summary_all_jobs(self):
         with self.db.connect() as conn:
@@ -91,6 +105,7 @@ class JobCostAllocationRepository:
                 """SELECT job_card_id, allocation_type,
                           SUM(amount_minor) as total
                    FROM job_cost_allocations
+                   WHERE job_card_id IS NOT NULL AND job_card_id != ''
                    GROUP BY job_card_id, allocation_type""",
             ).fetchall()
         jobs = {}
@@ -104,11 +119,44 @@ class JobCostAllocationRepository:
                 jobs[jid]["expense"] += r["total"]
         return jobs
 
+    def summary_all_quotes(self):
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """SELECT quote_id, allocation_type,
+                          SUM(amount_minor) as total
+                   FROM job_cost_allocations
+                   WHERE quote_id IS NOT NULL AND quote_id != ''
+                   GROUP BY quote_id, allocation_type""",
+            ).fetchall()
+        quotes = {}
+        for r in rows:
+            qid = r["quote_id"]
+            if qid not in quotes:
+                quotes[qid] = {"income": 0, "expense": 0}
+            if r["allocation_type"] == INCOME:
+                quotes[qid]["income"] += r["total"]
+            else:
+                quotes[qid]["expense"] += r["total"]
+        return quotes
+
+    @staticmethod
+    def _summarise_rows(rows):
+        income = 0
+        expenses = {}
+        for r in rows:
+            if r["allocation_type"] == INCOME:
+                income += r["total"]
+            else:
+                bucket = r["cost_bucket"] or "other"
+                expenses[bucket] = expenses.get(bucket, 0) + r["total"]
+        return income, expenses
+
     @staticmethod
     def _to(row):
         return JobCostAllocation(
             id=row["id"],
-            job_card_id=row["job_card_id"],
+            job_card_id=row["job_card_id"] or "",
+            quote_id=row["quote_id"] if "quote_id" in row.keys() else "",
             ledger_transaction_id=row["ledger_transaction_id"] or "",
             allocation_type=row["allocation_type"],
             description=row["description"],

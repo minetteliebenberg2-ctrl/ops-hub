@@ -9,6 +9,7 @@ from core.job_cost_allocation import (
 from core.ledger_repository import LedgerTransactionRepository
 from core.crm_repository import AddressRepository, CustomerRepository, SiteRepository
 from core.crm_service import CRMService
+from core.quote_repository import QuoteRepository
 from gui.styles import COLORS
 
 
@@ -18,6 +19,7 @@ class JobCostingModuleWindow(ctk.CTkFrame):
         super().__init__(master)
 
         self.job_card_repo = JobCardRepository(db=database)
+        self.quote_repo = QuoteRepository(db=database)
         self.allocation_repo = JobCostAllocationRepository(db=database)
         self.ledger_repo = LedgerTransactionRepository(db=database)
         self.customer_repo = CustomerRepository(db=database)
@@ -66,18 +68,21 @@ class JobCostingModuleWindow(ctk.CTkFrame):
             self.tree.delete(item)
 
         jobs = self.job_card_repo.list_all()
-        summaries = self.allocation_repo.summary_all_jobs()
+        job_summaries = self.allocation_repo.summary_all_jobs()
+        quote_summaries = self.allocation_repo.summary_all_quotes()
 
         customers = {}
         total_rev = 0
         total_cost = 0
+
+        job_quote_ids = {j.quote_id for j in jobs if j.quote_id}
 
         for job in jobs:
             if job.customer_id not in customers:
                 cust = self.customer_repo.get(job.customer_id)
                 customers[job.customer_id] = cust.name if cust else "Unknown"
 
-            s = summaries.get(job.id, {"income": 0, "expense": 0})
+            s = job_summaries.get(job.id, {"income": 0, "expense": 0})
             rev = s["income"]
             cost = s["expense"]
             gp = rev - cost
@@ -97,6 +102,36 @@ class JobCostingModuleWindow(ctk.CTkFrame):
                 gp_pct,
             ))
 
+        all_quotes = self.quote_repo.list_all()
+        accepted_quotes = [
+            q for q in all_quotes
+            if q.status == "Accepted" and q.id not in job_quote_ids
+        ]
+        for quote in accepted_quotes:
+            if quote.customer_id not in customers:
+                cust = self.customer_repo.get(quote.customer_id)
+                customers[quote.customer_id] = cust.name if cust else "Unknown"
+
+            s = quote_summaries.get(quote.id, {"income": 0, "expense": 0})
+            rev = s["income"]
+            cost = s["expense"]
+            gp = rev - cost
+            gp_pct = f"{gp / rev * 100:.0f}%" if rev > 0 else "-"
+
+            total_rev += rev
+            total_cost += cost
+
+            self.tree.insert("", "end", iid=f"q:{quote.id}", values=(
+                quote.quote_number or "(No number)",
+                customers[quote.customer_id],
+                "-",
+                "Quote",
+                f"R{rev / 100:,.2f}",
+                f"R{cost / 100:,.2f}",
+                f"R{gp / 100:,.2f}",
+                gp_pct,
+            ))
+
         total_gp = total_rev - total_cost
         total_pct = f"{total_gp / total_rev * 100:.0f}%" if total_rev > 0 else "-"
         self._summary_label.configure(
@@ -106,10 +141,6 @@ class JobCostingModuleWindow(ctk.CTkFrame):
         )
 
     def _new_job(self):
-        """Jobs used to be created from the Quotes/CRM job-card buttons.
-        Those were removed when Ops Hub went generic, so Job Costing
-        owns the only remaining way to open a job to cost against."""
-
         NewJobDialog(
             self.winfo_toplevel(), self.job_card_repo, self.customer_repo,
             on_saved=self._refresh_jobs,
@@ -121,6 +152,9 @@ class JobCostingModuleWindow(ctk.CTkFrame):
             messagebox.showinfo("Archive Job", "Select a job first.", parent=self)
             return
         job_id = sel[0]
+        if job_id.startswith("q:"):
+            messagebox.showinfo("Archive", "Quotes cannot be archived from here.", parent=self)
+            return
         job = self.job_card_repo.get(job_id)
         if not job:
             return
@@ -137,43 +171,60 @@ class JobCostingModuleWindow(ctk.CTkFrame):
         sel = self.tree.selection()
         if not sel:
             return
-        job_id = sel[0]
-        job = self.job_card_repo.get(job_id)
-        if job:
-            JobCostDetailWindow(
-                self.winfo_toplevel(), job,
-                self.allocation_repo, self.ledger_repo,
-                self.customer_repo,
-                on_change=self._refresh_jobs,
-            )
+        item_id = sel[0]
+        if item_id.startswith("q:"):
+            quote_id = item_id[2:]
+            quote = self.quote_repo.get(quote_id)
+            if quote:
+                QuoteCostDetailWindow(
+                    self.winfo_toplevel(), quote,
+                    self.allocation_repo, self.ledger_repo,
+                    self.customer_repo,
+                    on_change=self._refresh_jobs,
+                )
+        else:
+            job = self.job_card_repo.get(item_id)
+            if job:
+                JobCostDetailWindow(
+                    self.winfo_toplevel(), job,
+                    self.allocation_repo, self.ledger_repo,
+                    self.customer_repo,
+                    on_change=self._refresh_jobs,
+                )
 
 
-class JobCostDetailWindow(ctk.CTkToplevel):
+class _CostDetailBase(ctk.CTkToplevel):
+    """Shared base for job card and quote cost detail windows."""
 
-    def __init__(self, master, job, allocation_repo, ledger_repo, customer_repo, on_change=None):
+    _item_id = ""
+    _item_label = ""
+
+    def __init__(self, master, allocation_repo, ledger_repo, customer_repo, on_change=None):
         super().__init__(master)
-        self.job = job
         self.allocation_repo = allocation_repo
         self.ledger_repo = ledger_repo
         self.customer_repo = customer_repo
         self.on_change = on_change
 
-        cust = customer_repo.get(job.customer_id)
-        cust_name = cust.name if cust else "Unknown"
-        self.title(f"Job Costing — {job.job_card_number} ({cust_name})")
+    def _list_allocations(self):
+        raise NotImplementedError
+
+    def _summary(self):
+        raise NotImplementedError
+
+    def _make_allocation(self, **kwargs):
+        raise NotImplementedError
+
+    def _build_detail_ui(self, title, subtitle=None):
         self.geometry("900x600")
         self.lift()
         self.focus_force()
 
-        self._build_ui()
-        self._refresh()
-
-    def _build_ui(self):
         header = ctk.CTkFrame(self)
         header.pack(fill="x", padx=10, pady=(10, 5))
-        ctk.CTkLabel(header, text=f"{self.job.job_card_number}", font=ctk.CTkFont(size=18, weight="bold")).pack(side="left")
-        if self.job.purchase_order:
-            ctk.CTkLabel(header, text=f"PO: {self.job.purchase_order}", font=ctk.CTkFont(size=14)).pack(side="left", padx=15)
+        ctk.CTkLabel(header, text=title, font=ctk.CTkFont(size=18, weight="bold")).pack(side="left")
+        if subtitle:
+            ctk.CTkLabel(header, text=subtitle, font=ctk.CTkFont(size=14)).pack(side="left", padx=15)
 
         btn_row = ctk.CTkFrame(self)
         btn_row.pack(fill="x", padx=10, pady=5)
@@ -214,7 +265,7 @@ class JobCostDetailWindow(ctk.CTkToplevel):
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        self._allocations = self.allocation_repo.list_for_job(self.job.id)
+        self._allocations = self._list_allocations()
         for a in self._allocations:
             sign = "" if a.allocation_type == INCOME else "-"
             self.tree.insert("", "end", iid=a.id, values=(
@@ -226,7 +277,7 @@ class JobCostDetailWindow(ctk.CTkToplevel):
                 a.notes,
             ))
 
-        income, expenses = self.allocation_repo.summary_for_job(self.job.id)
+        income, expenses = self._summary()
         total_cost = sum(expenses.values())
         gp = income - total_cost
         gp_pct = f"{gp / income * 100:.0f}%" if income > 0 else "-"
@@ -239,13 +290,13 @@ class JobCostDetailWindow(ctk.CTkToplevel):
         self._summary_label.configure(text="   |   ".join(parts))
 
     def _add_revenue(self):
-        AddAllocationDialog(self, INCOME, self.job, self.allocation_repo, on_saved=self._on_saved)
+        AddAllocationDialog(self, INCOME, self._item_label, self._make_allocation, self.allocation_repo, on_saved=self._on_saved)
 
     def _add_cost(self):
-        AddAllocationDialog(self, EXPENSE, self.job, self.allocation_repo, on_saved=self._on_saved)
+        AddAllocationDialog(self, EXPENSE, self._item_label, self._make_allocation, self.allocation_repo, on_saved=self._on_saved)
 
     def _allocate_from_bank(self):
-        BankAllocationDialog(self, self.job, self.allocation_repo, self.ledger_repo, on_saved=self._on_saved)
+        BankAllocationDialog(self, self._item_label, self._make_allocation, self.allocation_repo, self.ledger_repo, on_saved=self._on_saved)
 
     def _delete_selected(self):
         sel = self.tree.selection()
@@ -262,6 +313,58 @@ class JobCostDetailWindow(ctk.CTkToplevel):
             self.on_change()
 
 
+class JobCostDetailWindow(_CostDetailBase):
+
+    def __init__(self, master, job, allocation_repo, ledger_repo, customer_repo, on_change=None):
+        super().__init__(master, allocation_repo, ledger_repo, customer_repo, on_change)
+        self.job = job
+        self._item_id = job.id
+        self._item_label = job.job_card_number
+
+        cust = customer_repo.get(job.customer_id)
+        cust_name = cust.name if cust else "Unknown"
+        self.title(f"Job Costing — {job.job_card_number} ({cust_name})")
+
+        subtitle = f"PO: {job.purchase_order}" if job.purchase_order else None
+        self._build_detail_ui(job.job_card_number, subtitle)
+        self._refresh()
+
+    def _list_allocations(self):
+        return self.allocation_repo.list_for_job(self.job.id)
+
+    def _summary(self):
+        return self.allocation_repo.summary_for_job(self.job.id)
+
+    def _make_allocation(self, **kwargs):
+        return JobCostAllocation(job_card_id=self.job.id, **kwargs)
+
+
+class QuoteCostDetailWindow(_CostDetailBase):
+
+    def __init__(self, master, quote, allocation_repo, ledger_repo, customer_repo, on_change=None):
+        super().__init__(master, allocation_repo, ledger_repo, customer_repo, on_change)
+        self.quote = quote
+        self._item_id = quote.id
+        self._item_label = quote.quote_number or "(No number)"
+
+        cust = customer_repo.get(quote.customer_id)
+        cust_name = cust.name if cust else "Unknown"
+        self.title(f"Job Costing — {self._item_label} ({cust_name})")
+
+        total_str = f"R{(quote.total_minor or 0) / 100:,.2f}"
+        self._build_detail_ui(self._item_label, f"Quote total: {total_str}")
+        self._refresh()
+
+    def _list_allocations(self):
+        return self.allocation_repo.list_for_quote(self.quote.id)
+
+    def _summary(self):
+        return self.allocation_repo.summary_for_quote(self.quote.id)
+
+    def _make_allocation(self, **kwargs):
+        return JobCostAllocation(quote_id=self.quote.id, **kwargs)
+
+
 class NewJobDialog(ctk.CTkToplevel):
     """Minimal job opener: pick a customer and one of its sites, then
     give the job a PO and a reference. job_cards.site_id is NOT NULL
@@ -276,8 +379,6 @@ class NewJobDialog(ctk.CTkToplevel):
         self.job_card_repo = job_card_repo
         self.customer_repo = customer_repo
         self.on_saved = on_saved
-        # Bound to the customer repository's database so the dialog
-        # reads and writes the same one the rest of the module does.
         self.crm = CRMService(
             customer_repository=customer_repo,
             site_repository=SiteRepository(db=customer_repo.db),
@@ -316,14 +417,10 @@ class NewJobDialog(ctk.CTkToplevel):
         self._sites = []
         self._load_sites(self._customer.get())
 
-    # --------------------------------------------------
-
     def _selected_customer(self):
-
         return next((c for c in self._customers if c.name == self._customer.get()), None)
 
     def _load_sites(self, _choice=None):
-
         customer = self._selected_customer()
         self._sites = self.crm.list_sites(customer.id) if customer else []
         names = [s.name or "(unnamed site)" for s in self._sites] or ["Main Site (will be created)"]
@@ -331,9 +428,6 @@ class NewJobDialog(ctk.CTkToplevel):
         self._site.set(names[0])
 
     def _site_id_for(self, customer):
-        """The chosen site's id, creating a default site when the
-        customer has none yet."""
-
         chosen = self._site.get()
         for site in self._sites:
             if (site.name or "(unnamed site)") == chosen:
@@ -341,8 +435,6 @@ class NewJobDialog(ctk.CTkToplevel):
 
         site = self.crm.new_site(customer.id)
         site.name = "Main Site"
-        # A default site carries no address; SiteRepository.save stores
-        # an empty address_id as NULL so the foreign key is satisfied.
         addresses = self.crm.list_addresses(customer.id)
         primary = next((a for a in addresses if getattr(a, "is_primary", False)), None)
         chosen_address = primary or (addresses[0] if addresses else None)
@@ -375,10 +467,10 @@ class NewJobDialog(ctk.CTkToplevel):
 
 class AddAllocationDialog(ctk.CTkToplevel):
 
-    def __init__(self, master, alloc_type, job, allocation_repo, on_saved=None):
+    def __init__(self, master, alloc_type, item_label, make_allocation, allocation_repo, on_saved=None):
         super().__init__(master)
         self.alloc_type = alloc_type
-        self.job = job
+        self._make_allocation = make_allocation
         self.allocation_repo = allocation_repo
         self.on_saved = on_saved
 
@@ -427,8 +519,7 @@ class AddAllocationDialog(ctk.CTkToplevel):
             messagebox.showerror("Error", "Amount must be positive.", parent=self)
             return
 
-        alloc = JobCostAllocation(
-            job_card_id=self.job.id,
+        alloc = self._make_allocation(
             allocation_type=self.alloc_type,
             description=self._desc.get().strip(),
             amount_minor=amount,
@@ -444,14 +535,15 @@ class AddAllocationDialog(ctk.CTkToplevel):
 
 class BankAllocationDialog(ctk.CTkToplevel):
 
-    def __init__(self, master, job, allocation_repo, ledger_repo, on_saved=None):
+    def __init__(self, master, item_label, make_allocation, allocation_repo, ledger_repo, on_saved=None):
         super().__init__(master)
-        self.job = job
+        self._item_label = item_label
+        self._make_allocation = make_allocation
         self.allocation_repo = allocation_repo
         self.ledger_repo = ledger_repo
         self.on_saved = on_saved
 
-        self.title(f"Allocate Bank Transactions to {job.job_card_number}")
+        self.title(f"Allocate Bank Transactions to {item_label}")
         self.geometry("800x500")
         self.lift()
         self.focus_force()
@@ -567,8 +659,7 @@ class BankAllocationDialog(ctk.CTkToplevel):
             if not tx:
                 continue
             alloc_type = INCOME if tx.transaction_type == "Income" else EXPENSE
-            alloc = JobCostAllocation(
-                job_card_id=self.job.id,
+            alloc = self._make_allocation(
                 ledger_transaction_id=tx.id,
                 allocation_type=alloc_type,
                 description=tx.description,
@@ -580,7 +671,7 @@ class BankAllocationDialog(ctk.CTkToplevel):
             self.allocation_repo.save(alloc, actor="minette")
             count += 1
 
-        messagebox.showinfo("Allocated", f"{count} transaction(s) allocated to {self.job.job_card_number}.", parent=self)
+        messagebox.showinfo("Allocated", f"{count} transaction(s) allocated to {self._item_label}.", parent=self)
         self.destroy()
         if self.on_saved:
             self.on_saved()

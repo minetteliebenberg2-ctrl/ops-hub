@@ -780,6 +780,13 @@ class CRMWindow(ctk.CTkFrame):
                 hover_color=COLORS["surface_tertiary"], border_width=0,
                 command=lambda q=quote: self._open_quote(q),
             ).pack(side="right")
+            if st == "Accepted":
+                ctk.CTkButton(
+                    row, text="💰 Costs", font=FONTS["label_sm"], height=22,
+                    fg_color="transparent", text_color=COLORS["text_secondary"],
+                    hover_color=COLORS["surface_tertiary"], border_width=0,
+                    command=lambda q=quote: self._open_quote_costing(q),
+                ).pack(side="right", padx=(0, SPACING["xs"]))
             ctk.CTkLabel(
                 row, text=format_money(quote.total_minor or 0, quote.currency or "ZAR"),
                 font=FONTS["body_md"], text_color=COLORS["text_primary"],
@@ -952,6 +959,18 @@ class CRMWindow(ctk.CTkFrame):
             self.crm_service,
             BusinessSettingsService(),
             quote.id,
+        )
+
+    def _open_quote_costing(self, quote):
+        from core.database import database
+        from core.job_cost_allocation import JobCostAllocationRepository
+        from core.ledger_service import LedgerTransactionRepository
+        from modules.job_costing.windows import QuoteCostDetailWindow
+        QuoteCostDetailWindow(
+            self.winfo_toplevel(), quote,
+            JobCostAllocationRepository(db=database),
+            LedgerTransactionRepository(db=database),
+            self.crm_service.customer_repository,
         )
 
     def _merge_customer(self, customer):

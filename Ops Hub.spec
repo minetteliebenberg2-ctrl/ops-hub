@@ -89,6 +89,7 @@ a = Analysis(
         'core.migrations.versions.v0058_deposit_percent_setting',
         'core.migrations.versions.v0059_plain_invoice',
         'core.migrations.versions.v0060_tax_return_dates',
+        'core.migrations.versions.v0061_job_cost_quote_id',
         # modules (collected via collect_submodules in hookspath is preferred, but list explicitly as fallback)
         'modules.job_costing', 'modules.job_costing.module', 'modules.job_costing.utility', 'modules.job_costing.windows',
     ],
